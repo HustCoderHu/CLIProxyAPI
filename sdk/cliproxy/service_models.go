@@ -883,7 +883,7 @@ func buildCodeBuddyCNConfigModels(entry *config.CodeBuddyCNKey) []*ModelInfo {
 	if entry == nil {
 		return nil
 	}
-	return buildConfigModels(entry.Models, constant.CodeBuddyCN, "openai")
+	return buildConfigModels(entry.Models, constant.CodeBuddyCN, "openai", "openai")
 }
 
 func (s *Service) resolveConfigCodeBuddyCNKey(auth *coreauth.Auth) *config.CodeBuddyCNKey {

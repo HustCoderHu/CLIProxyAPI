@@ -141,6 +141,26 @@ func (e *CodeBuddyCNExecutor) Refresh(ctx context.Context, auth *cliproxyauth.Au
 		auth.Metadata["expired"] = token.ExpiresAt.UTC().Format(time.RFC3339)
 	}
 	auth.Metadata["last_refresh"] = time.Now().UTC().Format(time.RFC3339)
+
+	// Sync back to workbuddy2api nested structure if present, preserving bidirectional compatibility.
+	if authObj, ok := auth.Metadata["auth"].(map[string]any); ok && authObj != nil {
+		authObj["accessToken"] = token.AccessToken
+		if strings.TrimSpace(token.RefreshToken) != "" {
+			authObj["refreshToken"] = token.RefreshToken
+		}
+		if !token.ExpiresAt.IsZero() {
+			authObj["expiresAt"] = token.ExpiresAt.Unix()
+		}
+	}
+	if _, ok := auth.Metadata["accessToken"]; ok {
+		auth.Metadata["accessToken"] = token.AccessToken
+		if strings.TrimSpace(token.RefreshToken) != "" {
+			auth.Metadata["refreshToken"] = token.RefreshToken
+		}
+		if !token.ExpiresAt.IsZero() {
+			auth.Metadata["expiresAt"] = token.ExpiresAt.Unix()
+		}
+	}
 	if auth.Attributes == nil {
 		auth.Attributes = make(map[string]string)
 	}
