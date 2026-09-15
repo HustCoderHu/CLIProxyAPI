@@ -234,18 +234,44 @@ func applyCodeBuddyCNOutgoingTransforms(ctx context.Context, auth *cliproxyauth.
 	body, _ = sjson.SetBytes(body, "stream", true)
 
 	body = applyCodeBuddyCNReasoning(body)
+	body = applyCodeBuddyCNBackfillReasoning(body)
 	body = applyCodeBuddyCNAgentSystemPrompt(body)
 	return body
 }
 
-// applyCodeBuddyCNReasoning maps reasoning_effort to reasoning_summary.
-// "none"/"off" drops the field; any other explicit value enables
-// reasoning_summary:"auto"; absent reasoning_effort leaves the request untouched.
+// applyCodeBuddyCNReasoning configures reasoning/thinking parameters for CodeBuddy.
+// For DeepSeek models, upstream requires thinking.type: "enabled" and reasoning_effort
+// (e.g. "high") to activate reasoning/thinking.
+// For other models, reasoning_effort is mapped to reasoning_summary: "auto".
 func applyCodeBuddyCNReasoning(body []byte) []byte {
-	if !gjson.GetBytes(body, "reasoning_effort").Exists() {
+	model := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "model").String()))
+	isDeepSeek := strings.HasPrefix(model, "deepseek")
+
+	hasEffort := gjson.GetBytes(body, "reasoning_effort").Exists()
+	eff := ""
+	if hasEffort {
+		eff = strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "reasoning_effort").String()))
+	}
+
+	thinkingType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "thinking.type").String()))
+
+	if isDeepSeek {
+		if eff == "none" || eff == "off" || thinkingType == "disabled" {
+			body, _ = sjson.DeleteBytes(body, "reasoning_effort")
+			body, _ = sjson.DeleteBytes(body, "reasoning_summary")
+			body, _ = sjson.SetBytes(body, "thinking.type", "disabled")
+			return body
+		}
+		body, _ = sjson.SetBytes(body, "thinking.type", "enabled")
+		if !hasEffort || eff == "" {
+			body, _ = sjson.SetBytes(body, "reasoning_effort", "high")
+		}
 		return body
 	}
-	eff := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "reasoning_effort").String()))
+
+	if !hasEffort {
+		return body
+	}
 	switch eff {
 	case "none", "off", "":
 		body, _ = sjson.DeleteBytes(body, "reasoning_effort")
@@ -255,6 +281,63 @@ func applyCodeBuddyCNReasoning(body []byte) []byte {
 		body, _ = sjson.SetBytes(body, "reasoning_summary", "auto")
 	}
 	return body
+}
+
+// applyCodeBuddyCNBackfillReasoning ensures multi-turn assistant messages carry reasoning_content
+// when reasoning traces exist, adhering to DeepSeek upstream requirements.
+func applyCodeBuddyCNBackfillReasoning(body []byte) []byte {
+	model := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "model").String()))
+	if !strings.HasPrefix(model, "deepseek") {
+		return body
+	}
+	messages := gjson.GetBytes(body, "messages")
+	if !messages.Exists() || !messages.IsArray() {
+		return body
+	}
+	hasTrace := false
+	messages.ForEach(func(_, msg gjson.Result) bool {
+		if msg.Get("role").String() == "assistant" {
+			if msg.Get("reasoning").Exists() && msg.Get("reasoning").String() != "" {
+				hasTrace = true
+				return false
+			}
+			if msg.Get("reasoning_content").Exists() {
+				hasTrace = true
+				return false
+			}
+		}
+		return true
+	})
+	if !hasTrace {
+		return body
+	}
+	changed := false
+	var out []any
+	messages.ForEach(func(_, item gjson.Result) bool {
+		if item.Get("role").String() == "assistant" && !item.Get("reasoning_content").Exists() {
+			rc := item.Get("reasoning").String()
+			entry := make(map[string]any)
+			_ = json.Unmarshal([]byte(item.Raw), &entry)
+			entry["reasoning_content"] = rc
+			out = append(out, entry)
+			changed = true
+			return true
+		}
+		out = append(out, json.RawMessage(item.Raw))
+		return true
+	})
+	if !changed {
+		return body
+	}
+	marshaled, err := json.Marshal(out)
+	if err != nil {
+		return body
+	}
+	updated, err := sjson.SetBytes(body, "messages", json.RawMessage(marshaled))
+	if err != nil {
+		return body
+	}
+	return updated
 }
 
 // agentSystemPromptPattern matches CLI agent system prompts that CodeBuddy's

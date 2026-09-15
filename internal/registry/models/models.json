@@ -4302,7 +4302,8 @@
         "levels": [
           "low",
           "medium",
-          "high"
+          "high",
+          "max"
         ]
       },
       "supportedInputModalities": [
@@ -4328,7 +4329,8 @@
         "levels": [
           "low",
           "medium",
-          "high"
+          "high",
+          "max"
         ]
       },
       "supportedInputModalities": [
@@ -4354,7 +4356,8 @@
         "levels": [
           "low",
           "medium",
-          "high"
+          "high",
+          "max"
         ]
       },
       "supportedInputModalities": [
@@ -4380,7 +4383,8 @@
         "levels": [
           "low",
           "medium",
-          "high"
+          "high",
+          "max"
         ]
       },
       "supportedInputModalities": [

@@ -61,31 +61,60 @@ func TestCodeBuddyCNPrepareRequestUsesOAuthAccessToken(t *testing.T) {
 
 func TestApplyCodeBuddyCNReasoning(t *testing.T) {
 	tests := []struct {
-		name     string
-		body     string
-		wantEff  bool // reasoning_effort should still be present
-		wantSumm string
+		name         string
+		body         string
+		wantEff      bool   // reasoning_effort should still be present
+		wantEffVal   string // expected reasoning_effort value
+		wantSumm     string
+		wantThinking string
 	}{
 		{
-			name:     "reasoning_effort present maps to reasoning_summary",
+			name:         "deepseek enables thinking and keeps reasoning_effort",
+			body:         `{"model":"deepseek-v4.1-flash","reasoning_effort":"high"}`,
+			wantEff:      true,
+			wantEffVal:   "high",
+			wantThinking: "enabled",
+		},
+		{
+			name:         "deepseek reasoning_effort max enables thinking and keeps max",
+			body:         `{"model":"deepseek-v4.1-flash","reasoning_effort":"max"}`,
+			wantEff:      true,
+			wantEffVal:   "max",
+			wantThinking: "enabled",
+		},
+		{
+			name:         "deepseek absent reasoning_effort defaults to high and enables thinking",
+			body:         `{"model":"deepseek-v4.1-flash"}`,
+			wantEff:      true,
+			wantEffVal:   "high",
+			wantThinking: "enabled",
+		},
+		{
+			name:         "deepseek reasoning_effort none disables thinking",
+			body:         `{"model":"deepseek-v4.1-flash","reasoning_effort":"none"}`,
+			wantEff:      false,
+			wantThinking: "disabled",
+		},
+		{
+			name:     "glm reasoning_effort present maps to reasoning_summary",
 			body:     `{"model":"glm-5.2","reasoning_effort":"high"}`,
 			wantEff:  false,
 			wantSumm: "auto",
 		},
 		{
-			name:     "reasoning_effort none drops field",
+			name:     "glm reasoning_effort none drops field",
 			body:     `{"model":"glm-5.2","reasoning_effort":"none"}`,
 			wantEff:  false,
 			wantSumm: "",
 		},
 		{
-			name:     "reasoning_effort off drops field",
+			name:     "glm reasoning_effort off drops field",
 			body:     `{"model":"glm-5.2","reasoning_effort":"off"}`,
 			wantEff:  false,
 			wantSumm: "",
 		},
 		{
-			name:     "absent reasoning_effort leaves body untouched",
+			name:     "glm absent reasoning_effort leaves body untouched",
 			body:     `{"model":"glm-5.2"}`,
 			wantEff:  false,
 			wantSumm: "",
@@ -97,9 +126,16 @@ func TestApplyCodeBuddyCNReasoning(t *testing.T) {
 			got := applyCodeBuddyCNReasoning([]byte(tt.body))
 			if eff := gjson.GetBytes(got, "reasoning_effort"); eff.Exists() != tt.wantEff {
 				t.Fatalf("reasoning_effort exists=%v, want %v (body=%s)", eff.Exists(), tt.wantEff, got)
+			} else if tt.wantEff && eff.String() != tt.wantEffVal {
+				t.Fatalf("reasoning_effort value=%q, want %q (body=%s)", eff.String(), tt.wantEffVal, got)
 			}
 			if summ := gjson.GetBytes(got, "reasoning_summary").String(); summ != tt.wantSumm {
 				t.Fatalf("reasoning_summary=%q, want %q (body=%s)", summ, tt.wantSumm, got)
+			}
+			if tt.wantThinking != "" {
+				if th := gjson.GetBytes(got, "thinking.type").String(); th != tt.wantThinking {
+					t.Fatalf("thinking.type=%q, want %q (body=%s)", th, tt.wantThinking, got)
+				}
 			}
 		})
 	}

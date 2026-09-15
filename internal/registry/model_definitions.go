@@ -542,6 +542,7 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 		data.AIStudio,
 		data.CodexPro,
 		data.Kimi,
+		data.CodeBuddyCN,
 		data.Antigravity,
 		data.XAI,
 		data.Devin,
