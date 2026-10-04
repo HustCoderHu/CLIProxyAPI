@@ -101,6 +101,7 @@ func detectChangedProviders(oldData, newData *staticModelsJSON) []string {
 		{"kimi-ai", oldData.Kimi, newData.Kimi},
 		{"kimi.ai", oldData.Kimi, newData.Kimi},
 		{"kimi.com", oldData.Kimi, newData.Kimi},
+		{"codebuddy-cn", oldData.CodeBuddyCN, newData.CodeBuddyCN},
 		{"antigravity", oldData.Antigravity, newData.Antigravity},
 		{"xai", oldData.XAI, newData.XAI},
 		{"devin", oldData.Devin, newData.Devin},

@@ -219,6 +219,7 @@ func baselineExecutorAuths() []*coreauth.Auth {
 		"kimi",
 		"kimi-ai",
 		"kimi.ai",
+		"codebuddy-cn",
 		"xai",
 		"devin",
 		"meta",
@@ -312,6 +313,8 @@ func (s *Service) registerExecutorForAuth(a *coreauth.Auth, forceReplace bool) {
 		s.coreManager.RegisterExecutor(executor.NewClaudeExecutor(cfg))
 	case "kimi", "kimi-ai", "kimi.ai", "kimi.com":
 		s.coreManager.RegisterExecutor(executor.NewKimiExecutor(cfg))
+	case "codebuddy-cn":
+		s.coreManager.RegisterExecutor(executor.NewCodeBuddyCNExecutor(cfg))
 	case "xai":
 		if !forceReplace {
 			existingExecutor, hasExecutor := s.coreManager.Executor("xai")
