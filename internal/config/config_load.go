@@ -307,6 +307,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	// Sanitize Meta keys.
 	cfg.SanitizeMetaKeys()
 
+	// Sanitize CodeBuddy CN keys: drop entries without api-key
+	cfg.SanitizeCodeBuddyCNKeys()
+
 	// Sanitize Codex header defaults.
 	cfg.SanitizeCodexHeaderDefaults()
 

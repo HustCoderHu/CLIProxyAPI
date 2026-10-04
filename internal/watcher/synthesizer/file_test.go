@@ -175,6 +175,80 @@ func TestFileSynthesizer_Synthesize_LegacyKimiFingerprintProfile(t *testing.T) {
 	}
 }
 
+func TestFileSynthesizer_Synthesize_CodeBuddyCNOAuth(t *testing.T) {
+	tempDir := t.TempDir()
+	raw := []byte(`{"type":"codebuddy-cn","access_token":"access","refresh_token":"refresh","auth_kind":"oauth"}`)
+	if err := os.WriteFile(filepath.Join(tempDir, "codebuddy-cn.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	auths, err := NewFileSynthesizer().Synthesize(&SynthesisContext{
+		Config:  &config.Config{},
+		AuthDir: tempDir,
+		Now:     time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Synthesize() error = %v", err)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("auth count = %d", len(auths))
+	}
+	if got := auths[0].AuthKind(); got != coreauth.AuthKindOAuth {
+		t.Fatalf("auth kind = %q", got)
+	}
+	if got := auths[0].Attributes["base_url"]; got != "https://copilot.tencent.com/v2" {
+		t.Fatalf("base_url = %q", got)
+	}
+}
+
+func TestFileSynthesizer_Synthesize_WorkBuddy2APINestedAuth(t *testing.T) {
+	tempDir := t.TempDir()
+	raw := []byte(`{
+		"account": {
+			"uid": "38993a2b-faa6-416d-a71e-7d367aff7ff9",
+			"nickname": "hu-广州"
+		},
+		"auth": {
+			"accessToken": "test-nested-access",
+			"refreshToken": "test-nested-refresh",
+			"expiresAt": 1794637676,
+			"domain": "www.codebuddy.cn",
+			"realm": "cn"
+		}
+	}`)
+	if err := os.WriteFile(filepath.Join(tempDir, "workbuddy-38993a2b.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	auths, err := NewFileSynthesizer().Synthesize(&SynthesisContext{
+		Config:  &config.Config{},
+		AuthDir: tempDir,
+		Now:     time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Synthesize() error = %v", err)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("auth count = %d", len(auths))
+	}
+	if got := auths[0].Provider; got != "codebuddy-cn" {
+		t.Fatalf("provider = %q, want codebuddy-cn", got)
+	}
+	if got := auths[0].AuthKind(); got != coreauth.AuthKindOAuth {
+		t.Fatalf("auth kind = %q, want oauth", got)
+	}
+	if got := auths[0].Attributes["base_url"]; got != "https://copilot.tencent.com/v2" {
+		t.Fatalf("base_url = %q", got)
+	}
+	if got := auths[0].Metadata["access_token"]; got != "test-nested-access" {
+		t.Fatalf("access_token = %v, want test-nested-access", got)
+	}
+	if got := auths[0].Metadata["refresh_token"]; got != "test-nested-refresh" {
+		t.Fatalf("refresh_token = %v, want test-nested-refresh", got)
+	}
+	if got := auths[0].Label; got != "hu-广州" {
+		t.Fatalf("label = %v, want hu-广州", got)
+	}
+}
+
 func TestFileSynthesizer_Synthesize_KimiAI(t *testing.T) {
 	tempDir := t.TempDir()
 	authDataAI := map[string]any{

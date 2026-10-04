@@ -152,6 +152,11 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.PATCH("/meta-api-key", s.mgmt.PatchMetaKey)
 		mgmt.DELETE("/meta-api-key", s.mgmt.DeleteMetaKey)
 
+		mgmt.GET("/codebuddy-cn-api-key", s.mgmt.GetCodeBuddyCNKeys)
+		mgmt.PUT("/codebuddy-cn-api-key", s.mgmt.PutCodeBuddyCNKeys)
+		mgmt.PATCH("/codebuddy-cn-api-key", s.mgmt.PatchCodeBuddyCNKey)
+		mgmt.DELETE("/codebuddy-cn-api-key", s.mgmt.DeleteCodeBuddyCNKey)
+
 		mgmt.GET("/openai-compatibility", s.mgmt.GetOpenAICompat)
 		mgmt.PUT("/openai-compatibility", s.mgmt.PutOpenAICompat)
 		mgmt.PATCH("/openai-compatibility", s.mgmt.PatchOpenAICompat)
@@ -193,6 +198,7 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.GET("/antigravity-auth-url", s.mgmt.RequestAntigravityToken)
 		mgmt.GET("/kimi-auth-url", s.mgmt.RequestKimiToken)
 		mgmt.GET("/kimi-ai-auth-url", s.mgmt.RequestKimiAIToken)
+		mgmt.GET("/codebuddy-cn-auth-url", s.mgmt.RequestCodeBuddyCNToken)
 		mgmt.GET("/xai-auth-url", s.mgmt.RequestXAIToken)
 		mgmt.GET("/devin-auth-url", s.mgmt.RequestDevinToken)
 		mgmt.GET("/meta-auth-url", s.mgmt.RequestMetaToken)

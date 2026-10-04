@@ -171,6 +171,9 @@ func publishCatalogBytes(data []byte) ([]string, error) {
 	if len(parsed.Meta) == 0 && old != nil {
 		parsed.Meta = old.Meta
 	}
+	if len(parsed.CodeBuddyCN) == 0 && old != nil && len(old.CodeBuddyCN) > 0 {
+		parsed.CodeBuddyCN = old.CodeBuddyCN
+	}
 	changed := detectChangedProviders(old, &parsed)
 	modelsCatalogStore.mu.Lock()
 	modelsCatalogStore.data = &parsed
