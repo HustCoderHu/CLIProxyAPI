@@ -143,6 +143,9 @@ type Config struct {
 	// MetaKey defines Meta API key configurations using the same structure as Codex API keys.
 	MetaKey []MetaKey `yaml:"meta-api-key" json:"meta-api-key"`
 
+	// CodeBuddyCNKey defines CodeBuddy CN (Tencent) API key configurations.
+	CodeBuddyCNKey []CodeBuddyCNKey `yaml:"codebuddy-cn-api-key" json:"codebuddy-cn-api-key"`
+
 	// XAI configures provider-wide xAI request behavior.
 	XAI XAIConfig `yaml:"xai" json:"xai"`
 

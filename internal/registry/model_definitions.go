@@ -33,6 +33,7 @@ type staticModelsJSON struct {
 	CodexPlus   []*ModelInfo `json:"codex-plus"`
 	CodexPro    []*ModelInfo `json:"codex-pro"`
 	Kimi        []*ModelInfo `json:"kimi"`
+	CodeBuddyCN []*ModelInfo `json:"codebuddy-cn"`
 	Antigravity []*ModelInfo `json:"antigravity"`
 	XAI         []*ModelInfo `json:"xai"`
 	Devin       []*ModelInfo `json:"devin"`
@@ -82,6 +83,11 @@ func GetCodexProModels() []*ModelInfo {
 // GetKimiModels returns the standard Kimi (Moonshot AI) model definitions.
 func GetKimiModels() []*ModelInfo {
 	return cloneModelInfos(getModels().Kimi)
+}
+
+// GetCodeBuddyCNModels returns the standard CodeBuddy CN (Tencent) model definitions.
+func GetCodeBuddyCNModels() []*ModelInfo {
+	return cloneModelInfos(getModels().CodeBuddyCN)
 }
 
 // GetAntigravityModels returns the standard Antigravity model definitions.
@@ -525,6 +531,8 @@ func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 		return GetCodexProModels()
 	case "kimi", "kimi-ai", "kimi.ai", "kimi.com":
 		return GetKimiModels()
+	case "codebuddy-cn":
+		return GetCodeBuddyCNModels()
 	case "antigravity":
 		return GetAntigravityModels()
 	case "xai", "x-ai", "grok":
@@ -573,6 +581,7 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 		data.AIStudio,
 		data.CodexPro,
 		data.Kimi,
+		data.CodeBuddyCN,
 		data.Antigravity,
 		data.XAI,
 		GetDevinModels(),
