@@ -89,6 +89,8 @@ func TestRegisterAvailableExecutors(t *testing.T) {
 		"kimi",
 		"kimi-ai",
 		"kimi.ai",
+		"codebuddy-cn",
+		"opencode",
 		"xai",
 		"openai-compatibility",
 		"plugin-provider",
@@ -103,6 +105,11 @@ func TestRegisterAvailableExecutors(t *testing.T) {
 	resolved, _ := service.coreManager.Executor("plugin-provider")
 	if _, isPlugin := resolved.(serviceTestPluginExecutor); !isPlugin {
 		t.Fatalf("executor type = %T, want serviceTestPluginExecutor", resolved)
+	}
+
+	resolvedOpenCode, _ := service.coreManager.Executor("opencode")
+	if _, isOpenCode := resolvedOpenCode.(*runtimeexecutor.OpenCodeExecutor); !isOpenCode {
+		t.Fatalf("executor type = %T, want *runtimeexecutor.OpenCodeExecutor", resolvedOpenCode)
 	}
 }
 
