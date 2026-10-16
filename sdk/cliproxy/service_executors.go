@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/constant"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pluginhost"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor"
@@ -219,6 +221,7 @@ func baselineExecutorAuths() []*coreauth.Auth {
 		"kimi-ai",
 		"kimi.ai",
 		"codebuddy-cn",
+		constant.OpenCode,
 		"xai",
 		"devin",
 		"meta",
@@ -314,6 +317,8 @@ func (s *Service) registerExecutorForAuth(a *coreauth.Auth, forceReplace bool) {
 		s.coreManager.RegisterExecutor(executor.NewKimiExecutor(cfg))
 	case "codebuddy-cn":
 		s.coreManager.RegisterExecutor(executor.NewCodeBuddyCNExecutor(cfg))
+	case constant.OpenCode:
+		s.coreManager.RegisterExecutor(executor.NewOpenCodeExecutor(cfg))
 	case "xai":
 		if !forceReplace {
 			existingExecutor, hasExecutor := s.coreManager.Executor("xai")
@@ -357,6 +362,22 @@ func (s *Service) registerOpenAICompatProviderExecutor(providerKey string, auth 
 	providerKey = strings.ToLower(strings.TrimSpace(providerKey))
 	if providerKey == "" {
 		providerKey = "openai-compatibility"
+	}
+	baseURL := ""
+	compatName := ""
+	if auth != nil && auth.Attributes != nil {
+		baseURL = auth.Attributes["base_url"]
+		compatName = auth.Attributes["compat_name"]
+	}
+	if strings.EqualFold(providerKey, constant.OpenCode) ||
+		strings.EqualFold(compatName, constant.OpenCode) ||
+		strings.EqualFold(providerKey, util.OpenAICompatibleProviderKey(constant.OpenCode)) ||
+		strings.Contains(strings.ToLower(baseURL), "opencode.ai/zen") ||
+		strings.Contains(strings.ToLower(baseURL), "opencode.ai/inference") {
+		log.Infof("registering OpenCodeExecutor for providerKey=%s, compatName=%s, baseURL=%s", providerKey, compatName, baseURL)
+		opencodeExec := executor.NewOpenCodeExecutorWithProvider(providerKey, cfg)
+		s.coreManager.RegisterExecutor(opencodeExec)
+		return
 	}
 	compatExecutor := executor.NewOpenAICompatExecutor(providerKey, cfg)
 	nextExecutor := s.wrapOpenAICompatIfPluginAuth(compatExecutor, auth, cfg)

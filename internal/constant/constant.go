@@ -28,6 +28,9 @@ const (
 	// CodeBuddyCN represents the CodeBuddy CN (Tencent) provider identifier.
 	CodeBuddyCN = "codebuddy-cn"
 
+	// OpenCode represents the OpenCode provider identifier.
+	OpenCode = "opencode"
+
 	// Interactions represents the Google Interactions API format identifier.
 	Interactions = "interactions"
 )
