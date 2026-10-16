@@ -74,20 +74,27 @@ func (e *CodeBuddyCNExecutor) Execute(ctx context.Context, auth *cliproxyauth.Au
 		return resp, nil
 	}
 	var buffer bytes.Buffer
-	for chunk := range streamResult.Chunks {
-		if chunk.Err != nil {
-			return resp, chunk.Err
-		}
-		if len(chunk.Payload) > 0 {
-			_, _ = buffer.Write(chunk.Payload)
-			_, _ = buffer.Write([]byte("\n"))
+	for {
+		select {
+		case <-ctx.Done():
+			return resp, ctx.Err()
+		case chunk, ok := <-streamResult.Chunks:
+			if !ok {
+				resp = cliproxyexecutor.Response{
+					Payload: aggregateCodeBuddyCNChunks(buffer.Bytes()),
+					Headers: streamResult.Headers,
+				}
+				return resp, nil
+			}
+			if chunk.Err != nil {
+				return resp, chunk.Err
+			}
+			if len(chunk.Payload) > 0 {
+				_, _ = buffer.Write(chunk.Payload)
+				_, _ = buffer.Write([]byte("\n"))
+			}
 		}
 	}
-	resp = cliproxyexecutor.Response{
-		Payload: aggregateCodeBuddyCNChunks(buffer.Bytes()),
-		Headers: streamResult.Headers,
-	}
-	return resp, nil
 }
 
 // ExecuteStream forces streaming and delegates to the OpenAI-compatible executor.
