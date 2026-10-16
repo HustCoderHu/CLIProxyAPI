@@ -508,6 +508,10 @@ func (e *OpenAICompatExecutor) executeStreamWithCredentials(ctx context.Context,
 	out := make(chan cliproxyexecutor.StreamChunk)
 	go func() {
 		defer close(out)
+		stopWatch := context.AfterFunc(ctx, func() {
+			_ = httpResp.Body.Close()
+		})
+		defer stopWatch()
 		defer func() {
 			if errClose := httpResp.Body.Close(); errClose != nil {
 				log.Errorf("openai compat executor: close response body error: %v", errClose)
@@ -613,6 +617,10 @@ func (e *OpenAICompatExecutor) executeStreamWithCredentials(ctx context.Context,
 
 	scanLoop:
 		for scanner.Scan() {
+			if ctx.Err() != nil {
+				streamAborted = true
+				break scanLoop
+			}
 			line := scanner.Bytes()
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
 			streamUsage.ObserveOpenAIStream(line)
@@ -640,6 +648,9 @@ func (e *OpenAICompatExecutor) executeStreamWithCredentials(ctx context.Context,
 			}
 		}
 		errScan := scanner.Err()
+		if ctx.Err() != nil {
+			return
+		}
 		if errScan == nil && !seenDone && !streamFailed && !streamAborted && len(frameData) > 0 {
 			_ = processFrame()
 		}
@@ -801,6 +812,10 @@ func (e *OpenAICompatExecutor) executeImagesStream(ctx context.Context, auth *cl
 		streamUsage.SetRequestPayload(payload, contentType)
 		usageObserver := helps.NewOpenAIStreamUsageObserver(&streamUsage, streamScannerBuffer)
 		observer := helps.NewStreamResponseModelObserver(reporter)
+		stopWatch := context.AfterFunc(ctx, func() {
+			_ = httpResp.Body.Close()
+		})
+		defer stopWatch()
 		defer func() {
 			observer.Finish()
 			if errClose := httpResp.Body.Close(); errClose != nil {
@@ -812,6 +827,9 @@ func (e *OpenAICompatExecutor) executeImagesStream(ctx context.Context, auth *cl
 		}()
 		buffer := make([]byte, 32*1024)
 		for {
+			if ctx.Err() != nil {
+				return
+			}
 			n, errRead := httpResp.Body.Read(buffer)
 			if n > 0 {
 				chunk := bytes.Clone(buffer[:n])

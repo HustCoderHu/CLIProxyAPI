@@ -1,13 +1,19 @@
 package executor
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/MoeForge/moego/ojson"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
 )
 
 func TestPrepareCodeBuddyCNAuthUsesOAuthTokenAndHeaders(t *testing.T) {
@@ -118,6 +124,36 @@ func TestApplyCodeBuddyCNReasoning(t *testing.T) {
 			body:     `{"model":"glm-5.2"}`,
 			wantEff:  false,
 			wantSumm: "",
+		},
+		{
+			name:     "stepfun reasoning_effort present maps to reasoning_summary",
+			body:     `{"model":"step-5-preview","reasoning_effort":"medium"}`,
+			wantEff:  false,
+			wantSumm: "auto",
+		},
+		{
+			name:     "stepfun reasoning_effort none drops field",
+			body:     `{"model":"step-5-preview","reasoning_effort":"none"}`,
+			wantEff:  false,
+			wantSumm: "",
+		},
+		{
+			name:     "space-bunny reasoning_effort present maps to reasoning_summary",
+			body:     `{"model":"space-bunny","reasoning_effort":"medium"}`,
+			wantEff:  false,
+			wantSumm: "auto",
+		},
+		{
+			name:     "space-bunny reasoning_effort none drops field",
+			body:     `{"model":"space-bunny","reasoning_effort":"none"}`,
+			wantEff:  false,
+			wantSumm: "",
+		},
+		{
+			name:     "kimi-k2.8-preview reasoning_effort present maps to reasoning_summary",
+			body:     `{"model":"kimi-k2.8-preview","reasoning_effort":"high"}`,
+			wantEff:  false,
+			wantSumm: "auto",
 		},
 	}
 
@@ -254,5 +290,111 @@ func TestAggregateCodeBuddyCNChunksToolCalls(t *testing.T) {
 	}
 	if fr := ojson.GetBytesNoCopy(got, "choices.0.finish_reason").String(); fr != "tool_calls" {
 		t.Fatalf("finish_reason=%q, want tool_calls (body=%s)", fr, got)
+	}
+}
+
+func TestCodeBuddyCNExecuteStreamCancellationClosesConnection(t *testing.T) {
+	serverDisconnected := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", `{"id":"1","choices":[{"delta":{"content":"chunk1"}}]}`)
+		flusher.Flush()
+
+		select {
+		case <-r.Context().Done():
+			close(serverDisconnected)
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	defer server.Close()
+
+	executor := NewCodeBuddyCNExecutor(nil)
+	executor.httpClientFactory = func(ctx context.Context, cfg *config.Config, auth *cliproxyauth.Auth, timeout time.Duration) *http.Client {
+		return server.Client()
+	}
+
+	auth := &cliproxyauth.Auth{
+		Provider: "codebuddy-cn",
+		Attributes: map[string]string{
+			"base_url": server.URL,
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	streamResult, err := executor.ExecuteStream(ctx, auth, cliproxyexecutor.Request{
+		Model:   "deepseek-v4.1-flash",
+		Payload: []byte(`{"model":"deepseek-v4.1-flash","messages":[{"role":"user","content":"hi"}]}`),
+	}, cliproxyexecutor.Options{
+		Stream:       true,
+		SourceFormat: sdktranslator.FromString("openai"),
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStream failed: %v", err)
+	}
+
+	chunk, ok := <-streamResult.Chunks
+	if !ok || chunk.Err != nil {
+		t.Fatalf("unexpected chunk: ok=%v, err=%v", ok, chunk.Err)
+	}
+
+	cancel()
+
+	select {
+	case <-serverDisconnected:
+	case <-time.After(3 * time.Second):
+		t.Fatal("upstream connection was not closed promptly upon context cancellation")
+	}
+
+	for range streamResult.Chunks {
+	}
+}
+
+func TestCodeBuddyCNExecuteCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", `{"id":"1","choices":[{"delta":{"content":"chunk1"}}]}`)
+		flusher.Flush()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	executor := NewCodeBuddyCNExecutor(nil)
+	executor.httpClientFactory = func(ctx context.Context, cfg *config.Config, auth *cliproxyauth.Auth, timeout time.Duration) *http.Client {
+		return server.Client()
+	}
+
+	auth := &cliproxyauth.Auth{
+		Provider: "codebuddy-cn",
+		Attributes: map[string]string{
+			"base_url": server.URL,
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		cancel()
+	}()
+
+	_, err := executor.Execute(ctx, auth, cliproxyexecutor.Request{
+		Model:   "deepseek-v4.1-flash",
+		Payload: []byte(`{"model":"deepseek-v4.1-flash","messages":[{"role":"user","content":"hi"}]}`),
+	}, cliproxyexecutor.Options{
+		Stream:       false,
+		SourceFormat: sdktranslator.FromString("openai"),
+	})
+	if err == nil {
+		t.Fatal("expected error on cancelled context, got nil")
 	}
 }
