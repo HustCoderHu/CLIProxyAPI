@@ -50,4 +50,54 @@ func TestRegisterModelsForAuthCodeBuddyCNOAuthIgnoresAPIKeyModels(t *testing.T) 
 			t.Fatalf("registered model[%d] = %q, want %q", i, got[i].ID, want[i].ID)
 		}
 	}
+
+	foundStep := false
+	foundSpace := false
+	foundKimi28 := false
+	for _, m := range got {
+		if m.ID == "kimi-k2.7-code" {
+			t.Fatal("unexpected legacy duplicate model kimi-k2.7-code found in registered models")
+		}
+		if m.ID == "step-5-preview" {
+			foundStep = true
+			if m.ContextLength != 1000000 {
+				t.Fatalf("step-5-preview context_length = %d, want 1000000", m.ContextLength)
+			}
+			if m.Thinking == nil || len(m.Thinking.Levels) == 0 {
+				t.Fatalf("step-5-preview thinking expected but missing")
+			}
+		}
+		if m.ID == "space-bunny" {
+			foundSpace = true
+			if m.ContextLength != 1000000 {
+				t.Fatalf("space-bunny context_length = %d, want 1000000", m.ContextLength)
+			}
+			if m.Thinking == nil || len(m.Thinking.Levels) == 0 {
+				t.Fatalf("space-bunny thinking expected but missing")
+			}
+		}
+		if m.ID == "kimi-k2.8-preview" {
+			foundKimi28 = true
+			if m.ContextLength != 1000000 {
+				t.Fatalf("kimi-k2.8-preview context_length = %d, want 1000000", m.ContextLength)
+			}
+			if m.Thinking == nil || len(m.Thinking.Levels) == 0 {
+				t.Fatalf("kimi-k2.8-preview thinking expected but missing")
+			}
+		}
+		if m.ID == "glm-5.3-flash" {
+			if len(m.SupportedInputModalities) != 1 || m.SupportedInputModalities[0] != "text" {
+				t.Fatalf("glm-5.3-flash supportedInputModalities = %v, want [text]", m.SupportedInputModalities)
+			}
+		}
+	}
+	if !foundStep {
+		t.Fatal("step-5-preview not found in registered CodeBuddy CN models")
+	}
+	if !foundSpace {
+		t.Fatal("space-bunny not found in registered CodeBuddy CN models")
+	}
+	if !foundKimi28 {
+		t.Fatal("kimi-k2.8-preview not found in registered CodeBuddy CN models")
+	}
 }

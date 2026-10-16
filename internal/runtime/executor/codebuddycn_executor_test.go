@@ -119,6 +119,36 @@ func TestApplyCodeBuddyCNReasoning(t *testing.T) {
 			wantEff:  false,
 			wantSumm: "",
 		},
+		{
+			name:     "stepfun reasoning_effort present maps to reasoning_summary",
+			body:     `{"model":"step-5-preview","reasoning_effort":"medium"}`,
+			wantEff:  false,
+			wantSumm: "auto",
+		},
+		{
+			name:     "stepfun reasoning_effort none drops field",
+			body:     `{"model":"step-5-preview","reasoning_effort":"none"}`,
+			wantEff:  false,
+			wantSumm: "",
+		},
+		{
+			name:     "space-bunny reasoning_effort present maps to reasoning_summary",
+			body:     `{"model":"space-bunny","reasoning_effort":"medium"}`,
+			wantEff:  false,
+			wantSumm: "auto",
+		},
+		{
+			name:     "space-bunny reasoning_effort none drops field",
+			body:     `{"model":"space-bunny","reasoning_effort":"none"}`,
+			wantEff:  false,
+			wantSumm: "",
+		},
+		{
+			name:     "kimi-k2.8-preview reasoning_effort present maps to reasoning_summary",
+			body:     `{"model":"kimi-k2.8-preview","reasoning_effort":"high"}`,
+			wantEff:  false,
+			wantSumm: "auto",
+		},
 	}
 
 	for _, tt := range tests {

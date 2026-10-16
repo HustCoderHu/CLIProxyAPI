@@ -4707,7 +4707,13 @@
           "medium",
           "high"
         ]
-      }
+      },
+      "supportedInputModalities": [
+        "text"
+      ],
+      "supportedOutputModalities": [
+        "text"
+      ]
     },
     {
       "id": "glm-5.2",
@@ -4871,14 +4877,14 @@
       ]
     },
     {
-      "id": "kimi-k2.7-code",
+      "id": "kimi-k2.8-preview",
       "object": "model",
       "created": 1761148800,
       "owned_by": "tencent",
       "type": "codebuddy-cn",
-      "display_name": "Kimi-K2.7-Code",
-      "description": "Kimi K2.7 Code via CodeBuddy CN",
-      "context_length": 256000,
+      "display_name": "Kimi-K2.8-Preview",
+      "description": "Kimi K2.8 Preview via CodeBuddy CN",
+      "context_length": 1000000,
       "max_completion_tokens": 32000,
       "thinking": {
         "zero_allowed": true,
@@ -5098,6 +5104,58 @@
           "medium",
           "high",
           "max"
+        ]
+      },
+      "supportedInputModalities": [
+        "text",
+        "image"
+      ],
+      "supportedOutputModalities": [
+        "text"
+      ]
+    },
+    {
+      "id": "step-5-preview",
+      "object": "model",
+      "created": 1791763200,
+      "owned_by": "tencent",
+      "type": "codebuddy-cn",
+      "display_name": "Step-5-Preview",
+      "description": "Step 5 Preview (Stepfun 600B MoE) via CodeBuddy CN",
+      "context_length": 1000000,
+      "max_completion_tokens": 64000,
+      "thinking": {
+        "zero_allowed": true,
+        "levels": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "supportedInputModalities": [
+        "text",
+        "image"
+      ],
+      "supportedOutputModalities": [
+        "text"
+      ]
+    },
+    {
+      "id": "space-bunny",
+      "object": "model",
+      "created": 1791763200,
+      "owned_by": "tencent",
+      "type": "codebuddy-cn",
+      "display_name": "Space Bunny",
+      "description": "Space Bunny (Anonymous Flash Model) via CodeBuddy CN",
+      "context_length": 1000000,
+      "max_completion_tokens": 64000,
+      "thinking": {
+        "zero_allowed": true,
+        "levels": [
+          "low",
+          "medium",
+          "high"
         ]
       },
       "supportedInputModalities": [
