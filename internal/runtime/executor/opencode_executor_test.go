@@ -8,6 +8,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/constant"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	"github.com/tidwall/gjson"
@@ -67,8 +68,8 @@ func TestOpenCodeExecutor_PrepareOpenCodeAuth(t *testing.T) {
 	}
 
 	// 3. User-Agent
-	if prepared.Attributes["header:User-Agent"] != OpenCodeDefaultUserAgent {
-		t.Errorf("expected User-Agent %q, got %q", OpenCodeDefaultUserAgent, prepared.Attributes["header:User-Agent"])
+	if prepared.Attributes["header:User-Agent"] != helps.CurrentOpenCodeUserAgent() {
+		t.Errorf("expected User-Agent %q, got %q", helps.CurrentOpenCodeUserAgent(), prepared.Attributes["header:User-Agent"])
 	}
 
 	// 4. Client
@@ -106,7 +107,7 @@ func TestOpenCodeExecutor_PrepareRequest(t *testing.T) {
 	cfg := &config.Config{}
 	exec := NewOpenCodeExecutor(cfg)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://opencode.ai/zen/v1/chat/completions", nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://opencode.ai/inference/openai/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
@@ -187,7 +188,7 @@ func TestApplyOpenCodeOutgoingTransforms(t *testing.T) {
 
 	// Verify tools injected
 	tools := gjson.GetBytes(transformed, "tools").Array()
-	if len(tools) != 5 {
-		t.Errorf("expected 5 tools injected, got %d", len(tools))
+	if len(tools) != 6 {
+		t.Errorf("expected 6 tools injected, got %d", len(tools))
 	}
 }

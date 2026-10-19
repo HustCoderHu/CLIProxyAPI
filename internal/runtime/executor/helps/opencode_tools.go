@@ -3,6 +3,8 @@ package helps
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,15 +23,68 @@ type openCodeToolDef struct {
 
 var (
 	openCodeToolsOnce sync.Once
+	openCodeToolsMu   sync.RWMutex
 	openCodeToolsMap  map[string]openCodeToolDef
-	openCodeCoreTools = []string{"shell", "read", "edit", "glob", "grep"}
+	openCodeCoreTools = []string{"shell", "read", "write", "edit", "glob", "grep"}
 )
 
 func initOpenCodeTools() {
 	openCodeToolsOnce.Do(func() {
-		openCodeToolsMap = make(map[string]openCodeToolDef)
-		_ = json.Unmarshal(openCodeToolsJSON, &openCodeToolsMap)
+		loadOpenCodeTools()
 	})
+}
+
+func loadOpenCodeTools() {
+	openCodeToolsMu.Lock()
+	defer openCodeToolsMu.Unlock()
+	openCodeToolsMap = make(map[string]openCodeToolDef)
+
+	const externalFile = "opencode_tools.json"
+	if data, err := os.ReadFile(externalFile); err == nil && len(data) > 0 {
+		var custom map[string]openCodeToolDef
+		if errUnmarshal := json.Unmarshal(data, &custom); errUnmarshal == nil && len(custom) > 0 {
+			openCodeToolsMap = custom
+			return
+		}
+	}
+
+	_ = json.Unmarshal(openCodeToolsJSON, &openCodeToolsMap)
+}
+
+// UpdateOpenCodeTools 允许在运行时动态热重载工具 Schema
+func UpdateOpenCodeTools(data []byte) error {
+	var newTools map[string]openCodeToolDef
+	if err := json.Unmarshal(data, &newTools); err != nil {
+		return err
+	}
+	if len(newTools) == 0 {
+		return errors.New("empty tool definitions")
+	}
+	initOpenCodeTools()
+	openCodeToolsMu.Lock()
+	defer openCodeToolsMu.Unlock()
+	openCodeToolsMap = newTools
+	return nil
+}
+
+// ResetOpenCodeTools 重置工具定义回内置嵌入数据，供测试使用
+func ResetOpenCodeTools() {
+	openCodeToolsMu.Lock()
+	defer openCodeToolsMu.Unlock()
+	openCodeToolsMap = make(map[string]openCodeToolDef)
+	_ = json.Unmarshal(openCodeToolsJSON, &openCodeToolsMap)
+}
+
+// GetOpenCodeTools 返回当前工具定义的副本
+func GetOpenCodeTools() map[string]openCodeToolDef {
+	initOpenCodeTools()
+	openCodeToolsMu.RLock()
+	defer openCodeToolsMu.RUnlock()
+	res := make(map[string]openCodeToolDef, len(openCodeToolsMap))
+	for k, v := range openCodeToolsMap {
+		res[k] = v
+	}
+	return res
 }
 
 func formatOpenAIFunctionTool(name string, def openCodeToolDef) map[string]any {
@@ -43,7 +98,7 @@ func formatOpenAIFunctionTool(name string, def openCodeToolDef) map[string]any {
 	}
 }
 
-// EnsureOpenCodeAnonymousTools ensures all 5 core tools are present in payload
+// EnsureOpenCodeAnonymousTools ensures all 6 core tools are present in payload
 // with exact official schemas, while preserving any Claude Code / custom tools.
 func EnsureOpenCodeAnonymousTools(payload []byte) []byte {
 	initOpenCodeTools()
@@ -70,6 +125,7 @@ func EnsureOpenCodeAnonymousTools(payload []byte) []byte {
 	}
 
 	changed := false
+	openCodeToolsMu.RLock()
 	// 1. Replace existing core tools with canonical schema if present
 	for _, name := range openCodeCoreTools {
 		if idx, ok := present[name]; ok {
@@ -89,6 +145,7 @@ func EnsureOpenCodeAnonymousTools(payload []byte) []byte {
 			}
 		}
 	}
+	openCodeToolsMu.RUnlock()
 
 	if !changed && toolsResult.Exists() {
 		return payload
@@ -127,8 +184,22 @@ func NormalizeOpenCodeToolCallsInChatCompletion(payload []byte) []byte {
 						payload, _ = sjson.SetBytes(payload, pathPrefix+".function.arguments", updatedArgs)
 					}
 				}
+			case "write":
+				payload, _ = sjson.SetBytes(payload, pathPrefix+".function.name", "Write")
+				argsRaw := tc.Get("function.arguments").String()
+				if gjson.Get(argsRaw, "path").Exists() && !gjson.Get(argsRaw, "file_path").Exists() {
+					if updatedArgs, err := sjson.Set(argsRaw, "file_path", gjson.Get(argsRaw, "path").Value()); err == nil {
+						payload, _ = sjson.SetBytes(payload, pathPrefix+".function.arguments", updatedArgs)
+					}
+				}
 			case "edit":
 				payload, _ = sjson.SetBytes(payload, pathPrefix+".function.name", "Edit")
+				argsRaw := tc.Get("function.arguments").String()
+				if gjson.Get(argsRaw, "path").Exists() && !gjson.Get(argsRaw, "file_path").Exists() {
+					if updatedArgs, err := sjson.Set(argsRaw, "file_path", gjson.Get(argsRaw, "path").Value()); err == nil {
+						payload, _ = sjson.SetBytes(payload, pathPrefix+".function.arguments", updatedArgs)
+					}
+				}
 			case "glob":
 				payload, _ = sjson.SetBytes(payload, pathPrefix+".function.name", "Glob")
 			case "grep":
@@ -161,6 +232,8 @@ func NormalizeOpenCodeToolCallChunk(chunk []byte) []byte {
 				chunk, _ = sjson.SetBytes(chunk, pathPrefix+".function.name", "Bash")
 			case "read":
 				chunk, _ = sjson.SetBytes(chunk, pathPrefix+".function.name", "Read")
+			case "write":
+				chunk, _ = sjson.SetBytes(chunk, pathPrefix+".function.name", "Write")
 			case "edit":
 				chunk, _ = sjson.SetBytes(chunk, pathPrefix+".function.name", "Edit")
 			case "glob":
