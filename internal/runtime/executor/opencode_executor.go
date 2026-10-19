@@ -21,13 +21,13 @@ import (
 
 const (
 	// OpenCodeDefaultUserAgent is the official CLI User-Agent expected by OpenCode's free-tier gate.
-	OpenCodeDefaultUserAgent = "opencode/latest/2.0.29/cli"
+	OpenCodeDefaultUserAgent = "opencode/latest/2.0.32/cli"
 
 	// OpenCodeDefaultClient is the default client identifier.
 	OpenCodeDefaultClient = "cli"
 
 	// OpenCodeDefaultBaseURL is the fallback base URL for OpenCode inference.
-	OpenCodeDefaultBaseURL = "https://opencode.ai/zen/v1"
+	OpenCodeDefaultBaseURL = "https://opencode.ai/inference/openai/v1"
 )
 
 // OpenCodeExecutor handles OpenCode inference requests with free-tier gate compliance.
@@ -47,6 +47,7 @@ func NewOpenCodeExecutorWithProvider(provider string, cfg *config.Config) *OpenC
 	if provider == "" {
 		provider = constant.OpenCode
 	}
+	helps.StartOpenCodeUpdater(context.Background(), cfg)
 	e := NewOpenAICompatExecutor(provider, cfg)
 	e.outgoingTransforms = applyOpenCodeOutgoingTransforms
 	return &OpenCodeExecutor{
@@ -78,23 +79,29 @@ func (e *OpenCodeExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth,
 		return resp, nil
 	}
 	var buffer bytes.Buffer
-	for chunk := range streamResult.Chunks {
-		if chunk.Err != nil {
-			return resp, chunk.Err
-		}
-		if len(chunk.Payload) > 0 {
-			_, _ = buffer.Write(chunk.Payload)
-			_, _ = buffer.Write([]byte("\n"))
+	for {
+		select {
+		case <-ctx.Done():
+			return resp, ctx.Err()
+		case chunk, ok := <-streamResult.Chunks:
+			if !ok {
+				aggregated := helps.AggregateOpenAIStreamChunks(buffer.Bytes())
+				normalized := helps.NormalizeOpenCodeToolCallsInChatCompletion(aggregated)
+				resp = cliproxyexecutor.Response{
+					Payload: normalized,
+					Headers: streamResult.Headers,
+				}
+				return resp, nil
+			}
+			if chunk.Err != nil {
+				return resp, chunk.Err
+			}
+			if len(chunk.Payload) > 0 {
+				_, _ = buffer.Write(chunk.Payload)
+				_, _ = buffer.Write([]byte("\n"))
+			}
 		}
 	}
-	aggregated := helps.AggregateOpenAIStreamChunks(buffer.Bytes())
-	normalized := helps.NormalizeOpenCodeToolCallsInChatCompletion(aggregated)
-
-	resp = cliproxyexecutor.Response{
-		Payload: normalized,
-		Headers: streamResult.Headers,
-	}
-	return resp, nil
 }
 
 // ExecuteStream forces streaming and normalizes SSE chunks on-the-fly.
@@ -168,7 +175,7 @@ func (e *OpenCodeExecutor) prepareOpenCodeAuth(ctx context.Context, auth *clipro
 		prepared.Attributes = make(map[string]string)
 	}
 
-	// 1. Base URL normalization: default to https://opencode.ai/zen/v1, and trim trailing /chat/completions and slashes.
+	// 1. Base URL normalization: default to https://opencode.ai/inference/openai/v1, and trim trailing /chat/completions and slashes.
 	baseURL := strings.TrimSpace(prepared.Attributes["base_url"])
 	if baseURL == "" {
 		baseURL = OpenCodeDefaultBaseURL
@@ -224,7 +231,7 @@ func (e *OpenCodeExecutor) prepareOpenCodeAuth(ctx context.Context, auth *clipro
 	projectID := helps.OpenCodeProjectID(projectSignal)
 
 	// 5. Inject required headers into prepared.Attributes for OpenAICompatExecutor
-	prepared.Attributes["header:User-Agent"] = OpenCodeDefaultUserAgent
+	prepared.Attributes["header:User-Agent"] = helps.CurrentOpenCodeUserAgent()
 	prepared.Attributes["header:x-opencode-client"] = OpenCodeDefaultClient
 	prepared.Attributes["header:x-opencode-session"] = canonicalSession
 	prepared.Attributes["header:x-opencode-session-id"] = canonicalSession

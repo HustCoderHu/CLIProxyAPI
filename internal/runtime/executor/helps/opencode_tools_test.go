@@ -14,8 +14,8 @@ func TestEnsureOpenCodeAnonymousTools_Empty(t *testing.T) {
 	if !tools.Exists() || !tools.IsArray() {
 		t.Fatalf("tools array missing in output: %s", output)
 	}
-	if len(tools.Array()) != 5 {
-		t.Fatalf("expected 5 tools, got %d", len(tools.Array()))
+	if len(tools.Array()) != 6 {
+		t.Fatalf("expected 6 tools, got %d", len(tools.Array()))
 	}
 
 	names := make(map[string]bool)
@@ -27,7 +27,7 @@ func TestEnsureOpenCodeAnonymousTools_Empty(t *testing.T) {
 			t.Fatalf("tool %q missing description", name)
 		}
 	}
-	for _, expected := range []string{"shell", "read", "edit", "glob", "grep"} {
+	for _, expected := range []string{"shell", "read", "write", "edit", "glob", "grep"} {
 		if !names[expected] {
 			t.Errorf("missing core tool: %s", expected)
 		}
@@ -39,9 +39,9 @@ func TestEnsureOpenCodeAnonymousTools_PreserveClaudeTools(t *testing.T) {
 	output := EnsureOpenCodeAnonymousTools(input)
 
 	tools := gjson.GetBytes(output, "tools").Array()
-	// Should have Bash + 5 core tools = 6 tools
-	if len(tools) != 6 {
-		t.Fatalf("expected 6 tools (1 custom + 5 core), got %d: %s", len(tools), output)
+	// Should have Bash + 6 core tools = 7 tools
+	if len(tools) != 7 {
+		t.Fatalf("expected 7 tools (1 custom + 6 core), got %d: %s", len(tools), output)
 	}
 
 	names := make(map[string]bool)
@@ -51,7 +51,7 @@ func TestEnsureOpenCodeAnonymousTools_PreserveClaudeTools(t *testing.T) {
 	if !names["Bash"] {
 		t.Errorf("expected custom tool 'Bash' to be preserved")
 	}
-	for _, expected := range []string{"shell", "read", "edit", "glob", "grep"} {
+	for _, expected := range []string{"shell", "read", "write", "edit", "glob", "grep"} {
 		if !names[expected] {
 			t.Errorf("missing core tool: %s", expected)
 		}
@@ -63,8 +63,8 @@ func TestEnsureOpenCodeAnonymousTools_OverrideStubs(t *testing.T) {
 	output := EnsureOpenCodeAnonymousTools(input)
 
 	tools := gjson.GetBytes(output, "tools").Array()
-	if len(tools) != 5 {
-		t.Fatalf("expected 5 tools, got %d", len(tools))
+	if len(tools) != 6 {
+		t.Fatalf("expected 6 tools, got %d", len(tools))
 	}
 	for _, tool := range tools {
 		if tool.Get("function.name").String() == "read" {
@@ -99,6 +99,14 @@ func TestNormalizeOpenCodeToolCallsInChatCompletion(t *testing.T) {
 							"name": "read",
 							"arguments": "{\"path\":\"main.go\",\"offset\":1}"
 						}
+					},
+					{
+						"id": "call_3",
+						"type": "function",
+						"function": {
+							"name": "write",
+							"arguments": "{\"path\":\"new.txt\",\"content\":\"hello\"}"
+						}
 					}
 				]
 			}
@@ -121,6 +129,16 @@ func TestNormalizeOpenCodeToolCallsInChatCompletion(t *testing.T) {
 	if gjson.Get(tc1Args, "file_path").String() != "main.go" {
 		t.Fatalf("expected path to be mapped to file_path in arguments, got %s", tc1Args)
 	}
+
+	tc2Name := gjson.GetBytes(normalized, "choices.0.message.tool_calls.2.function.name").String()
+	if tc2Name != "Write" {
+		t.Fatalf("expected write -> Write, got %s", tc2Name)
+	}
+
+	tc2Args := gjson.GetBytes(normalized, "choices.0.message.tool_calls.2.function.arguments").String()
+	if gjson.Get(tc2Args, "file_path").String() != "new.txt" {
+		t.Fatalf("expected path to be mapped to file_path in arguments, got %s", tc2Args)
+	}
 }
 
 func TestNormalizeOpenCodeToolCallChunk(t *testing.T) {
@@ -142,5 +160,24 @@ func TestNormalizeOpenCodeToolCallChunk(t *testing.T) {
 	name := gjson.GetBytes(normalized, "choices.0.delta.tool_calls.0.function.name").String()
 	if name != "Bash" {
 		t.Fatalf("expected shell -> Bash in chunk, got %s", name)
+	}
+
+	writeChunk := []byte(`{
+		"choices": [{
+			"index": 0,
+			"delta": {
+				"tool_calls": [{
+					"index": 0,
+					"function": {
+						"name": "write"
+					}
+				}]
+			}
+		}]
+	}`)
+	normWrite := NormalizeOpenCodeToolCallChunk(writeChunk)
+	writeName := gjson.GetBytes(normWrite, "choices.0.delta.tool_calls.0.function.name").String()
+	if writeName != "Write" {
+		t.Fatalf("expected write -> Write in chunk, got %s", writeName)
 	}
 }
