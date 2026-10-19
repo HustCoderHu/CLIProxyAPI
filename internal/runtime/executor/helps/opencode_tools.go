@@ -3,6 +3,8 @@ package helps
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,15 +22,68 @@ type openCodeToolDef struct {
 
 var (
 	openCodeToolsOnce sync.Once
+	openCodeToolsMu   sync.RWMutex
 	openCodeToolsMap  map[string]openCodeToolDef
-	openCodeCoreTools = []string{"shell", "read", "edit", "glob", "grep"}
+	openCodeCoreTools = []string{"shell", "read", "write", "edit", "glob", "grep"}
 )
 
 func initOpenCodeTools() {
 	openCodeToolsOnce.Do(func() {
-		openCodeToolsMap = make(map[string]openCodeToolDef)
-		_ = json.Unmarshal(openCodeToolsJSON, &openCodeToolsMap)
+		loadOpenCodeTools()
 	})
+}
+
+func loadOpenCodeTools() {
+	openCodeToolsMu.Lock()
+	defer openCodeToolsMu.Unlock()
+	openCodeToolsMap = make(map[string]openCodeToolDef)
+
+	const externalFile = "opencode_tools.json"
+	if data, err := os.ReadFile(externalFile); err == nil && len(data) > 0 {
+		var custom map[string]openCodeToolDef
+		if errUnmarshal := json.Unmarshal(data, &custom); errUnmarshal == nil && len(custom) > 0 {
+			openCodeToolsMap = custom
+			return
+		}
+	}
+
+	_ = json.Unmarshal(openCodeToolsJSON, &openCodeToolsMap)
+}
+
+// UpdateOpenCodeTools hot-reloads the tool schemas at runtime.
+func UpdateOpenCodeTools(data []byte) error {
+	var newTools map[string]openCodeToolDef
+	if err := json.Unmarshal(data, &newTools); err != nil {
+		return err
+	}
+	if len(newTools) == 0 {
+		return errors.New("empty tool definitions")
+	}
+	initOpenCodeTools()
+	openCodeToolsMu.Lock()
+	defer openCodeToolsMu.Unlock()
+	openCodeToolsMap = newTools
+	return nil
+}
+
+// ResetOpenCodeTools restores the embedded tool definitions. Test use only.
+func ResetOpenCodeTools() {
+	openCodeToolsMu.Lock()
+	defer openCodeToolsMu.Unlock()
+	openCodeToolsMap = make(map[string]openCodeToolDef)
+	_ = json.Unmarshal(openCodeToolsJSON, &openCodeToolsMap)
+}
+
+// GetOpenCodeTools returns a copy of the current tool definitions.
+func GetOpenCodeTools() map[string]openCodeToolDef {
+	initOpenCodeTools()
+	openCodeToolsMu.RLock()
+	defer openCodeToolsMu.RUnlock()
+	res := make(map[string]openCodeToolDef, len(openCodeToolsMap))
+	for k, v := range openCodeToolsMap {
+		res[k] = v
+	}
+	return res
 }
 
 func formatOpenAIFunctionTool(name string, def openCodeToolDef) map[string]any {
@@ -42,7 +97,7 @@ func formatOpenAIFunctionTool(name string, def openCodeToolDef) map[string]any {
 	}
 }
 
-// EnsureOpenCodeAnonymousTools ensures all 5 core tools are present in payload
+// EnsureOpenCodeAnonymousTools ensures all 6 core tools are present in payload
 // with exact official schemas, while preserving any Claude Code / custom tools.
 func EnsureOpenCodeAnonymousTools(payload []byte) []byte {
 	doc := ojson.NewDoc(payload)
@@ -81,6 +136,7 @@ func EnsureOpenCodeAnonymousToolsDoc(doc *ojson.Doc) bool {
 	}
 
 	changed := false
+	openCodeToolsMu.RLock()
 	// 1. Replace existing core tools with canonical schema if present.
 	for _, name := range openCodeCoreTools {
 		if idx, ok := present[name]; ok {
@@ -100,6 +156,7 @@ func EnsureOpenCodeAnonymousToolsDoc(doc *ojson.Doc) bool {
 			}
 		}
 	}
+	openCodeToolsMu.RUnlock()
 
 	if !changed && toolsResult.Exists() {
 		return false
@@ -144,16 +201,15 @@ func NormalizeOpenCodeToolCallsInChatCompletionDoc(doc *ojson.Doc) bool {
 				changed = true
 			case "read":
 				_ = doc.Set(pathPrefix+".function.name", "Read")
-				argsRaw := tc.Get("function.arguments").String()
-				if argsPath := ojson.Get(argsRaw, "path"); argsPath.Exists() && !ojson.Get(argsRaw, "file_path").Exists() {
-					argsDoc := ojson.NewDocString(argsRaw)
-					if err := argsDoc.Set("file_path", argsPath.Value()); err == nil {
-						_ = doc.SetRawBytes(pathPrefix+".function.arguments", argsDoc.Bytes())
-					}
-				}
+				renameOpenCodeToolArgPathToFilePath(doc, pathPrefix, tc)
+				changed = true
+			case "write":
+				_ = doc.Set(pathPrefix+".function.name", "Write")
+				renameOpenCodeToolArgPathToFilePath(doc, pathPrefix, tc)
 				changed = true
 			case "edit":
 				_ = doc.Set(pathPrefix+".function.name", "Edit")
+				renameOpenCodeToolArgPathToFilePath(doc, pathPrefix, tc)
 				changed = true
 			case "glob":
 				_ = doc.Set(pathPrefix+".function.name", "Glob")
@@ -165,6 +221,22 @@ func NormalizeOpenCodeToolCallsInChatCompletionDoc(doc *ojson.Doc) bool {
 		}
 	}
 	return changed
+}
+
+// renameOpenCodeToolArgPathToFilePath copies a tool call's "path" argument into
+// "file_path" when the latter is absent, matching Claude Code's Read/Write/Edit
+// argument schema.
+func renameOpenCodeToolArgPathToFilePath(doc *ojson.Doc, pathPrefix string, tc ojson.Result) {
+	argsRaw := tc.Get("function.arguments").String()
+	argsPath := ojson.Get(argsRaw, "path")
+	if !argsPath.Exists() || ojson.Get(argsRaw, "file_path").Exists() {
+		return
+	}
+	argsDoc := ojson.NewDocString(argsRaw)
+	if err := argsDoc.Set("file_path", argsPath.Value()); err != nil {
+		return
+	}
+	_ = doc.SetRawBytes(pathPrefix+".function.arguments", argsDoc.Bytes())
 }
 
 // NormalizeOpenCodeToolCallChunk normalizes tool_call names in SSE chunk deltas.
@@ -202,6 +274,9 @@ func NormalizeOpenCodeToolCallChunkDoc(doc *ojson.Doc) bool {
 				changed = true
 			case "read":
 				_ = doc.Set(pathPrefix+".function.name", "Read")
+				changed = true
+			case "write":
+				_ = doc.Set(pathPrefix+".function.name", "Write")
 				changed = true
 			case "edit":
 				_ = doc.Set(pathPrefix+".function.name", "Edit")
