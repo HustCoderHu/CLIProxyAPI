@@ -4896,20 +4896,18 @@
   ],
   "codebuddy-cn": [
     {
-      "id": "hy4-preview",
+      "id": "hy4free",
       "object": "model",
-      "created": 1761148800,
+      "created": 1793750400,
       "owned_by": "tencent",
       "type": "codebuddy-cn",
-      "display_name": "Hy4 Preview",
-      "description": "Hy4 Preview (Tencent Hunyuan 770B MoE) via CodeBuddy CN",
-      "context_length": 1000000,
+      "display_name": "Hy4 (Free)",
+      "description": "Hy4 free daily quota (Tencent Hunyuan) via CodeBuddy CN",
+      "context_length": 960000,
       "max_completion_tokens": 64000,
       "thinking": {
-        "zero_allowed": true,
+        "zero_allowed": false,
         "levels": [
-          "low",
-          "medium",
           "high"
         ]
       },
@@ -4922,20 +4920,18 @@
       ]
     },
     {
-      "id": "hy4",
+      "id": "hy4std",
       "object": "model",
-      "created": 1761148800,
+      "created": 1793750400,
       "owned_by": "tencent",
       "type": "codebuddy-cn",
       "display_name": "Hy4",
-      "description": "Hy4 (Tencent Hunyuan 770B MoE) via CodeBuddy CN",
-      "context_length": 1000000,
+      "description": "Hy4 (Tencent Hunyuan) via CodeBuddy CN",
+      "context_length": 960000,
       "max_completion_tokens": 64000,
       "thinking": {
-        "zero_allowed": true,
+        "zero_allowed": false,
         "levels": [
-          "low",
-          "medium",
           "high"
         ]
       },

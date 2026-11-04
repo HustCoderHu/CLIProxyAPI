@@ -54,6 +54,8 @@ func TestRegisterModelsForAuthCodeBuddyCNOAuthIgnoresAPIKeyModels(t *testing.T) 
 	foundStep := false
 	foundSpace := false
 	foundKimi28 := false
+	foundHy4Free := false
+	foundHy4Std := false
 	for _, m := range got {
 		if m.ID == "kimi-k2.7-code" {
 			t.Fatal("unexpected legacy duplicate model kimi-k2.7-code found in registered models")
@@ -90,6 +92,14 @@ func TestRegisterModelsForAuthCodeBuddyCNOAuthIgnoresAPIKeyModels(t *testing.T) 
 				t.Fatalf("glm-5.3-flash supportedInputModalities = %v, want [text]", m.SupportedInputModalities)
 			}
 		}
+		if m.ID == "hy4free" {
+			foundHy4Free = true
+			assertHy4Model(t, m)
+		}
+		if m.ID == "hy4std" {
+			foundHy4Std = true
+			assertHy4Model(t, m)
+		}
 	}
 	if !foundStep {
 		t.Fatal("step-5-preview not found in registered CodeBuddy CN models")
@@ -99,5 +109,27 @@ func TestRegisterModelsForAuthCodeBuddyCNOAuthIgnoresAPIKeyModels(t *testing.T) 
 	}
 	if !foundKimi28 {
 		t.Fatal("kimi-k2.8-preview not found in registered CodeBuddy CN models")
+	}
+	if !foundHy4Free {
+		t.Fatal("hy4free not found in registered CodeBuddy CN models")
+	}
+	if !foundHy4Std {
+		t.Fatal("hy4std not found in registered CodeBuddy CN models")
+	}
+}
+
+// assertHy4Model checks the Hy4 free/paid pair against the live CodeBuddy CN
+// catalog: 960k input, 64k output, single "high" reasoning level that cannot
+// be disabled.
+func assertHy4Model(t *testing.T, m *registry.ModelInfo) {
+	t.Helper()
+	if m.ContextLength != 960000 {
+		t.Fatalf("%s context_length = %d, want 960000", m.ID, m.ContextLength)
+	}
+	if m.MaxCompletionTokens != 64000 {
+		t.Fatalf("%s max_completion_tokens = %d, want 64000", m.ID, m.MaxCompletionTokens)
+	}
+	if m.Thinking == nil || m.Thinking.ZeroAllowed || len(m.Thinking.Levels) != 1 || m.Thinking.Levels[0] != "high" {
+		t.Fatalf("%s thinking = %#v, want levels [high] with zero_allowed=false", m.ID, m.Thinking)
 	}
 }
