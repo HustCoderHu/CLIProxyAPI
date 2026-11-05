@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/auth/antigravity"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/auth/claude"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/auth/codebuddycn"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/auth/codex"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/auth/kimi"
 	metaauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/meta"
@@ -422,7 +423,7 @@ func (h *Handler) RequestCodexToken(c *gin.Context) {
 
 func isIdentitylessOAuthProvider(provider string) bool {
 	trimmed := strings.ToLower(strings.TrimSpace(provider))
-	return trimmed == "kimi" || trimmed == "kimi-ai"
+	return trimmed == "kimi" || trimmed == "kimi-ai" || trimmed == "codebuddy-cn"
 }
 
 func matchesOAuthRecoveryTarget(target oauthRecoveryTarget, email, accountID, candidateFileName string) bool {
@@ -1277,6 +1278,80 @@ func (h *Handler) requestKimiTokenWithDomain(c *gin.Context, domain string) {
 	}()
 
 	c.JSON(200, response)
+}
+
+// RequestCodeBuddyCNToken starts CodeBuddy CN browser authorization and polls for tokens.
+func (h *Handler) RequestCodeBuddyCNToken(c *gin.Context) {
+	ctx := PopulateAuthContext(context.Background(), c)
+	sessionProxyURL := oauthSessionProxyURLFromContext(c)
+	client := codebuddycn.NewClientWithProxyURL(h.cfg, sessionProxyURL)
+	device, errStart := client.StartDeviceFlow(ctx)
+	if errStart != nil {
+		log.Errorf("Failed to start CodeBuddy CN authorization: %v", errStart)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start CodeBuddy CN authorization"})
+		return
+	}
+	state := strings.TrimSpace(device.State)
+	if errState := ValidateOAuthState(state); errState != nil {
+		log.WithError(errState).Error("CodeBuddy CN returned invalid authorization state")
+		c.JSON(http.StatusBadGateway, gin.H{"error": "invalid authorization state"})
+		return
+	}
+	RegisterOAuthSessionWithProxy(state, "codebuddy-cn", sessionProxyURL)
+
+	go func() {
+		pollCtx, cancelPoll := context.WithCancel(ctx)
+		defer cancelPoll()
+		go watchOAuthSessionCancel(pollCtx, cancelPoll, state, "codebuddy-cn")
+		token, errWait := client.WaitForAuthorization(pollCtx, device)
+		if errWait != nil {
+			if !IsOAuthSessionPending(state, "codebuddy-cn") {
+				return
+			}
+			log.Errorf("CodeBuddy CN authentication failed: %v", errWait)
+			SetOAuthSessionError(state, oauthSessionErrorWithCause("Authentication failed", errWait))
+			return
+		}
+		if !IsOAuthSessionPending(state, "codebuddy-cn") {
+			return
+		}
+		metadata := map[string]any{
+			"type":         "codebuddy-cn",
+			"auth_kind":    "oauth",
+			"access_token": token.AccessToken,
+			"token_type":   token.TokenType,
+			"expires_in":   token.ExpiresIn,
+			"base_url":     codebuddycn.APIBaseURL,
+			"timestamp":    time.Now().UnixMilli(),
+		}
+		if strings.TrimSpace(token.RefreshToken) != "" {
+			metadata["refresh_token"] = token.RefreshToken
+		}
+		if !token.ExpiresAt.IsZero() {
+			metadata["expired"] = token.ExpiresAt.UTC().Format(time.RFC3339)
+		}
+		fileName := fmt.Sprintf("codebuddy-cn-%d.json", time.Now().UnixMilli())
+		record := &coreauth.Auth{
+			ID:       fileName,
+			Provider: "codebuddy-cn",
+			FileName: fileName,
+			Label:    "CodeBuddy CN",
+			Metadata: metadata,
+			Attributes: map[string]string{
+				coreauth.AttributeAuthKind: coreauth.AuthKindOAuth,
+				"base_url":                 codebuddycn.APIBaseURL,
+			},
+		}
+		h.commitAndCompleteBuiltinOAuthSession(ctx, state, "codebuddy-cn", sessionProxyURL, record, "Failed to save authentication tokens", false)
+	}()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":     "ok",
+		"url":        device.AuthURL,
+		"state":      state,
+		"flow":       "device",
+		"expires_in": device.ExpiresIn,
+	})
 }
 
 // watchOAuthSessionCancel cancels pollCtx once the OAuth session is no longer pending.

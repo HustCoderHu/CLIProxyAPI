@@ -51,6 +51,18 @@ func ensureOpenAICompatUserAgent(r *http.Request, clientHeaders ...http.Header) 
 type OpenAICompatExecutor struct {
 	provider string
 	cfg      *config.Config
+
+	// httpClientFactory optionally supplies a provider-specific HTTP client.
+	// It defaults to the standard proxy-aware transport.
+	httpClientFactory func(ctx context.Context, cfg *config.Config, auth *cliproxyauth.Auth, timeout time.Duration) *http.Client
+
+	// outgoingTransforms is an optional hook invoked on the final translated
+	// OpenAI upstream body before it is sent. It mutates the ojson document so
+	// that the body is serialized exactly once at the exit. It defaults to a
+	// no-op. Because Go does not dispatch methods virtually through embedding,
+	// provider-specific executors must install the hook via this field rather
+	// than overriding a method (see CodeBuddyCNExecutor).
+	outgoingTransforms func(ctx context.Context, auth *cliproxyauth.Auth, baseModel string, opts cliproxyexecutor.Options, doc *ojson.Doc) error
 }
 
 // NewOpenAICompatExecutor creates an executor bound to a provider key (e.g., "openrouter").
@@ -64,6 +76,13 @@ func (e *OpenAICompatExecutor) Identifier() string { return e.provider }
 // UsesConfig reports whether the executor is bound to the provided config snapshot.
 func (e *OpenAICompatExecutor) UsesConfig(cfg *config.Config) bool {
 	return e != nil && e.cfg == cfg
+}
+
+func (e *OpenAICompatExecutor) newHTTPClient(ctx context.Context, auth *cliproxyauth.Auth, timeout time.Duration) *http.Client {
+	if e.httpClientFactory != nil {
+		return e.httpClientFactory(ctx, e.cfg, auth, timeout)
+	}
+	return helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, timeout)
 }
 
 // PrepareRequest injects OpenAI-compatible credentials into the outgoing HTTP request.
@@ -96,7 +115,7 @@ func (e *OpenAICompatExecutor) HttpRequest(ctx context.Context, auth *cliproxyau
 	if err := e.PrepareRequest(httpReq, auth); err != nil {
 		return nil, err
 	}
-	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := e.newHTTPClient(ctx, auth, 0)
 	return httpClient.Do(httpReq)
 }
 
@@ -180,6 +199,9 @@ func (e *OpenAICompatExecutor) executeWithCredentials(ctx context.Context, auth 
 		_ = doc.Delete("stream")
 		sanitizeOpenAIResponsesReasoningEncryptedContentWithCompatModelAndBaseURLDoc(ctx, "openai compat executor", doc, true, resolveResponsesSignatureTargetModel(baseModel, req, opts), baseURL)
 	}
+	if err = e.applyOutgoingTransformsDoc(ctx, auth, baseModel, opts, doc); err != nil {
+		return resp, err
+	}
 	url := strings.TrimSuffix(baseURL, "/") + endpoint
 	helps.ApplyPayloadConfigWithRequestDoc(e.cfg, baseModel, to.String(), from.String(), "", doc, originalTranslated, requestedModel, requestPath, opts.Headers)
 	translated = doc.Bytes()
@@ -216,7 +238,7 @@ func (e *OpenAICompatExecutor) executeWithCredentials(ctx context.Context, auth 
 		AuthValue: authValue,
 	})
 
-	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := e.newHTTPClient(ctx, auth, 0)
 	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
@@ -317,7 +339,7 @@ func (e *OpenAICompatExecutor) executeImages(ctx context.Context, auth *cliproxy
 		AuthValue: authValue,
 	})
 
-	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := e.newHTTPClient(ctx, auth, 0)
 	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
@@ -422,6 +444,10 @@ func (e *OpenAICompatExecutor) executeStreamWithCredentials(ctx context.Context,
 	// are captured even when the upstream is an OpenAI-compatible provider.
 	helps.SetBoolIfDifferentDoc(doc, "stream_options.include_usage", true)
 
+	if err = e.applyOutgoingTransformsDoc(ctx, auth, baseModel, opts, doc); err != nil {
+		return nil, err
+	}
+
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
 	helps.ApplyPayloadConfigWithRequestDoc(e.cfg, baseModel, to.String(), from.String(), "", doc, originalTranslated, requestedModel, requestPath, opts.Headers)
 	translated = doc.Bytes()
@@ -460,7 +486,7 @@ func (e *OpenAICompatExecutor) executeStreamWithCredentials(ctx context.Context,
 		AuthValue: authValue,
 	})
 
-	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := e.newHTTPClient(ctx, auth, 0)
 	// Early role/empty frames are only first-packet fallbacks, not effective tokens.
 	httpClient = reporter.TrackHTTPClientRoundTripOnly(httpClient)
 	httpResp, err := httpClient.Do(httpReq)
@@ -745,7 +771,7 @@ func (e *OpenAICompatExecutor) executeImagesStream(ctx context.Context, auth *cl
 		AuthValue: authValue,
 	})
 
-	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := e.newHTTPClient(ctx, auth, 0)
 	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
@@ -894,6 +920,10 @@ func (e *OpenAICompatExecutor) CountTokens(ctx context.Context, auth *cliproxyau
 
 	doc := ojson.NewDoc(translated)
 	if err = helps.ApplyRequestThinkingDoc(doc, req, opts, from.String(), to.String(), e.Identifier(), updatesChanged); err != nil {
+		return cliproxyexecutor.Response{}, err
+	}
+
+	if err = e.applyOutgoingTransformsDoc(ctx, auth, baseModel, opts, doc); err != nil {
 		return cliproxyexecutor.Response{}, err
 	}
 
@@ -1132,6 +1162,16 @@ func (e *OpenAICompatExecutor) applyPromptCacheKeyWithCompatDoc(ctx context.Cont
 	promptCacheKey := uuid.NewSHA1(uuid.NameSpaceOID, []byte(identity)).String()
 	helps.SetStringIfDifferentDoc(doc, "prompt_cache_key", promptCacheKey)
 	return nil
+}
+
+// applyOutgoingTransformsDoc mutates the final OpenAI upstream document via the
+// optional outgoingTransforms hook. When no hook is installed the document is
+// left unchanged.
+func (e *OpenAICompatExecutor) applyOutgoingTransformsDoc(ctx context.Context, auth *cliproxyauth.Auth, baseModel string, opts cliproxyexecutor.Options, doc *ojson.Doc) error {
+	if e == nil || e.outgoingTransforms == nil || doc == nil {
+		return nil
+	}
+	return e.outgoingTransforms(ctx, auth, baseModel, opts, doc)
 }
 
 func (e *OpenAICompatExecutor) resolveCredentials(auth *cliproxyauth.Auth) (baseURL, apiKey string) {
