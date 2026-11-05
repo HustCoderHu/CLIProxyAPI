@@ -73,3 +73,6 @@ docker-compose.override.yml
 
 # key
 .cli-proxy-api/
+
+# Trellis framework (committed) — per-developer workspace is local-only
+.trellis/workspace/
