@@ -25,7 +25,12 @@ type LoginOptions struct {
 	// Prompt allows the caller to provide interactive input when needed.
 	Prompt func(prompt string) (string, error)
 
+	// ProxyURL overrides the proxy for the OAuth login flow when set.
 	ProxyURL string
+
+	// PersonalToken imports a personal access token instead of running the
+	// interactive browser flow. Only providers with a PAT exchange honour it.
+	PersonalToken string
 }
 
 // DoCodexLogin triggers the Codex OAuth flow through the shared authentication manager.

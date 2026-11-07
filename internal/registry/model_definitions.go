@@ -41,6 +41,8 @@ type staticModelsJSON struct {
 	XAI         []*ModelInfo `json:"xai"`
 	Devin       []*ModelInfo `json:"devin"`
 	Meta        []*ModelInfo `json:"meta"`
+	Qoder       []*ModelInfo `json:"qoder"`
+	QoderINTL   []*ModelInfo `json:"qoder-intl"`
 }
 
 // GetClaudeModels returns the standard Claude model definitions.
@@ -216,6 +218,194 @@ var staticDevinModels = []*ModelInfo{
 			Levels: []string{"high", "max"},
 		},
 	},
+}
+
+// Qoder static seeds exist so the management endpoints can answer during cold
+// start, before the first per-account catalog probe completes. They are not the
+// source of truth: live probes publish the authoritative, enable-filtered
+// catalog per credential.
+//
+// Seeding policy (deliberate, not symmetric across realms):
+//
+//   - CN: every enable=true key of qoder_catalog_cn.json is seeded, except
+//     "auto". All 14 keys are enable=true in the snapshot, but "auto" is a
+//     framework-reserved name that internal/util/provider.go ResolveAutoModel
+//     intercepts before any executor runs, so a seed entry for it could never
+//     serve a request. The CN seed therefore holds 13 models.
+//   - INTL: only the two keys that are enable=true in qoder_catalog_intl.json
+//     (qmodel_38max, qfmodel) are seeded. The other 15 are enable=false in the
+//     snapshot; seeding them would expose models that a failing probe would then
+//     never retract, which is strictly worse than an empty list.
+//
+// Thinking support is level-only for both realms: the upstream catalog carries
+// no token budget, so Min/Max/DynamicAllowed/DisableType are never set. Levels
+// come from thinking_config.enabled.efforts; zero_allowed comes from the
+// presence of thinking_config.disabled. Models without thinking_config get a
+// nil Thinking so client reasoning fields are stripped.
+var staticQoderModels = []*ModelInfo{
+	// ---------- CN (qoder_catalog_cn.json) ----------
+	{
+		ID:              "qmodel_38max",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "Qwen3.8-Max",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"low", "medium", "xhigh"}},
+	},
+	{
+		ID:              "qfmodel",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "Qwen3.8-Flash",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"low", "medium", "xhigh"}},
+	},
+	{
+		ID:              "qmodel_latest",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "Qwen3.7-Max",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"high"}},
+	},
+	{
+		ID:              "qmodel",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "Qwen3.7-Plus",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"high"}},
+	},
+	{
+		ID:              "q37fmodel",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "Qwen3.7-Flash",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+	},
+	{
+		ID:              "dmodel",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "DeepSeek-V4-Pro",
+		ContextLength:   96000,
+		InputTokenLimit: 96000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"high", "max"}},
+	},
+	{
+		ID:              "dfmodel",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "DeepSeek-Flash",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"high", "low", "max"}},
+	},
+	{
+		ID:              "gmodel",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "GLM-5.3",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{Levels: []string{"high", "low", "max"}},
+	},
+	{
+		ID:              "gfmodel",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "GLM-5.3-Flash",
+		ContextLength:   1000000,
+		InputTokenLimit: 1000000,
+		Thinking:        &ThinkingSupport{Levels: []string{"high", "max"}},
+	},
+	{
+		ID:              "gm51model",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "GLM-5.2",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"high", "max"}},
+	},
+	{
+		ID:              "kmodel_latest",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "Kimi-K3",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{Levels: []string{"high", "low", "max"}},
+	},
+	{
+		ID:              "kmodel",
+		Type:            "qoder",
+		OwnedBy:         "qoder",
+		DisplayName:     "Kimi-K2.8-Preview",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{Levels: []string{"high", "low", "max"}},
+	},
+	{
+		ID:                       "mmodel",
+		Type:                     "qoder",
+		OwnedBy:                  "qoder",
+		DisplayName:              "MiniMax-M2.7",
+		ContextLength:            180000,
+		InputTokenLimit:          180000,
+		SupportedInputModalities: []string{"text"},
+	},
+}
+
+// staticQoderINTLModels seeds only the keys that are enable=true in
+// qoder_catalog_intl.json. See the seeding policy note above.
+var staticQoderINTLModels = []*ModelInfo{
+	{
+		ID:              "qmodel_38max",
+		Type:            "qoder-intl",
+		OwnedBy:         "qoder",
+		DisplayName:     "Qwen3.8-Max",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"low", "medium", "xhigh"}},
+	},
+	{
+		ID:              "qfmodel",
+		Type:            "qoder-intl",
+		OwnedBy:         "qoder",
+		DisplayName:     "Qwen3.8-Flash",
+		ContextLength:   180000,
+		InputTokenLimit: 180000,
+		Thinking:        &ThinkingSupport{ZeroAllowed: true, Levels: []string{"low", "medium", "xhigh"}},
+	},
+}
+
+// GetQoderModels returns the static seed catalog for the given Qoder provider
+// key. Unknown providers yield nil.
+//
+// A catalog-provided section wins over the compiled-in seed when one is present;
+// the live per-account probe is still authoritative and replaces these entries.
+func GetQoderModels(provider string) []*ModelInfo {
+	catalogs := getModels()
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "qoder", "qoder-cn", "cn":
+		if catalogs != nil && len(catalogs.Qoder) > 0 {
+			return cloneModelInfos(catalogs.Qoder)
+		}
+		return cloneModelInfos(staticQoderModels)
+	case "qoder-intl", "qoder-international", "intl":
+		if catalogs != nil && len(catalogs.QoderINTL) > 0 {
+			return cloneModelInfos(catalogs.QoderINTL)
+		}
+		return cloneModelInfos(staticQoderINTLModels)
+	default:
+		return nil
+	}
 }
 
 // AntigravityWebSearchModelFor returns the Antigravity model that should run a
@@ -591,6 +781,8 @@ func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 		return GetDevinModels()
 	case "meta", "muse":
 		return GetMetaModels()
+	case "qoder", "qoder-cn", "cn", "qoder-intl", "qoder-international", "intl":
+		return GetQoderModels(key)
 	default:
 		return nil
 	}
@@ -645,6 +837,8 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 		data.XAI,
 		GetDevinModels(),
 		GetMetaModels(),
+		GetQoderModels("qoder"),
+		GetQoderModels("qoder-intl"),
 	}
 	for _, models := range allModels {
 		for _, m := range models {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	qoderauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/qoder"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/constant"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
@@ -15,6 +16,14 @@ import (
 // ConfigSynthesizer generates Auth entries from configuration API keys.
 // It handles Gemini, Interactions, Claude, Codex, xAI, OpenAI-compat, and Vertex-compat providers.
 type ConfigSynthesizer struct{}
+
+// Qoder gateway hosts used when a qoder-api-key entry does not set its own
+// base-url. They match the realm constants the executor and the model catalog
+// probe fall back to.
+const (
+	qoderCNGatewayBaseURL   = "https://gateway.qoder.com.cn"
+	qoderINTLGatewayBaseURL = "https://api3.qoder.sh"
+)
 
 // NewConfigSynthesizer creates a new ConfigSynthesizer instance.
 func NewConfigSynthesizer() *ConfigSynthesizer {
@@ -107,6 +116,9 @@ func (s *ConfigSynthesizer) Synthesize(ctx *SynthesisContext) ([]*coreauth.Auth,
 	out = append(out, s.synthesizeXAIKeys(ctx)...)
 	// Meta API Keys
 	out = append(out, s.synthesizeMetaKeys(ctx)...)
+	// Qoder API Keys (China mainland and international)
+	out = append(out, s.synthesizeQoderKeys(ctx, ctx.Config.QoderKey, constant.QoderCN, qoderCNGatewayBaseURL)...)
+	out = append(out, s.synthesizeQoderKeys(ctx, ctx.Config.QoderINTLKey, constant.QoderINTL, qoderINTLGatewayBaseURL)...)
 	// OpenAI-compat
 	out = append(out, s.synthesizeOpenAICompat(ctx)...)
 	// Vertex-compat
@@ -281,6 +293,87 @@ func (s *ConfigSynthesizer) synthesizeXAIKeys(ctx *SynthesisContext) []*coreauth
 // synthesizeMetaKeys creates Auth entries for Meta API keys.
 func (s *ConfigSynthesizer) synthesizeMetaKeys(ctx *SynthesisContext) []*coreauth.Auth {
 	return s.synthesizeCodexStyleKeys(ctx, ctx.Config.MetaKey, "meta")
+}
+
+// synthesizeQoderKeys creates Auth entries for Qoder API keys. The same shape
+// serves both realms; provider and default gateway select the region.
+//
+// The configured api-key is a Qoder personal access token ("pt-..."). It is
+// stored in two places on purpose:
+//   - attributes["api_key"] anchors credential identity (auth index, dedup) and
+//     is the conventional slot every provider uses;
+//   - metadata["access_token"] is what the Qoder executor reads for the COSY
+//     identity and what the model catalog probe requires before it will fetch a
+//     catalog. Without it the credential resolves no models at all.
+//
+// metadata["personal_token"] records the upstream provenance so the token
+// rotation path can exchange the personal token for a job token pair.
+//
+// The runtime kind is API key, not OAuth: config-synthesized credentials are only
+// registered when IsConfigAPIKeyAuth holds, which requires the apikey kind and a
+// config source, and the same check keeps them out of the auth store. The PAT
+// provenance lives in metadata "auth_kind" and is what the executor owns.
+// The realm is fully expressed by the provider key, so no realm field is written.
+func (s *ConfigSynthesizer) synthesizeQoderKeys(ctx *SynthesisContext, entries []config.QoderKey, provider, defaultBaseURL string) []*coreauth.Auth {
+	now := ctx.Now
+	idGen := ctx.IDGenerator
+
+	out := make([]*coreauth.Auth, 0, len(entries))
+	for i := range entries {
+		entry := entries[i]
+		key := strings.TrimSpace(entry.APIKey)
+		if key == "" {
+			continue
+		}
+		prefix := strings.TrimSpace(entry.Prefix)
+		baseURL := strings.TrimSpace(entry.BaseURL)
+		if baseURL == "" {
+			baseURL = defaultBaseURL
+		}
+		id, token := idGen.Next(provider+":apikey", key, baseURL, prefix)
+		attrs := map[string]string{
+			"source":       fmt.Sprintf("config:%s[%s]", provider, token),
+			"api_key":      key,
+			"base_url":     baseURL,
+			"config_index": strconv.Itoa(i),
+		}
+		metadata := map[string]any{
+			"type":           provider,
+			"auth_kind":      qoderauth.AuthKindPAT,
+			"source":         "pat",
+			"base_url":       baseURL,
+			"access_token":   key,
+			"personal_token": key,
+			"token_type":     "Bearer",
+			"user_type":      qoderauth.DefaultUserType,
+		}
+		if entry.DisableCooling != nil {
+			metadata["disable_cooling"] = *entry.DisableCooling
+		}
+		if entry.Priority != 0 {
+			attrs["priority"] = strconv.Itoa(entry.Priority)
+		}
+		addWeightToAttrs(entry.Weight, attrs)
+		addConfigHeadersToAttrs(entry.Headers, attrs)
+		a := &coreauth.Auth{
+			ID:         id,
+			Provider:   provider,
+			Label:      provider + "-apikey",
+			Prefix:     prefix,
+			Status:     coreauth.StatusActive,
+			ProxyURL:   strings.TrimSpace(entry.ProxyURL),
+			Attributes: attrs,
+			Metadata:   metadata,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+		ApplyAuthExcludedModelsMeta(a, entry.ExcludedModels, "apikey")
+		if len(a.Metadata) == 0 {
+			a.Metadata = nil
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entries []config.CodexKey, provider string) []*coreauth.Auth {

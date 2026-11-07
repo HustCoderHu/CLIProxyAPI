@@ -656,6 +656,10 @@ func NormalizeOAuthProvider(provider string) (string, error) {
 		return "devin", nil
 	case "meta", "muse":
 		return "meta", nil
+	case "qoder", "qoder-cn":
+		return "qoder", nil
+	case "qoder-intl", "qoder-international":
+		return "qoder-intl", nil
 	default:
 		return "", errUnsupportedOAuthFlow
 	}

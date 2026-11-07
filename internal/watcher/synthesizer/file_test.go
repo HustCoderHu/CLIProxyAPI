@@ -178,6 +178,65 @@ func TestFileSynthesizer_Synthesize_LegacyKimiFingerprintProfile(t *testing.T) {
 	}
 }
 
+// TestFileSynthesizer_Synthesize_QoderAuthFiles locks the metadata-only Qoder
+// credential shape: provider comes from "type", the gateway host is lifted onto
+// attributes, and both realms keep their own base_url.
+func TestFileSynthesizer_Synthesize_QoderAuthFiles(t *testing.T) {
+	tests := []struct {
+		name        string
+		raw         string
+		wantType    string
+		wantBaseURL string
+	}{
+		{
+			name:        "cn device flow",
+			raw:         `{"type":"qoder","auth_kind":"oauth","access_token":"dt-1","refresh_token":"drt-1","uid":"uid-1"}`,
+			wantType:    "qoder",
+			wantBaseURL: "https://gateway.qoder.com.cn",
+		},
+		{
+			name:        "intl with explicit base_url",
+			raw:         `{"type":"qoder-intl","auth_kind":"oauth","access_token":"dt-1","base_url":"https://api3.qoder.sh","domain":"qoder.com"}`,
+			wantType:    "qoder-intl",
+			wantBaseURL: "https://api3.qoder.sh",
+		},
+		{
+			name:        "pat import keeps oauth runtime kind",
+			raw:         `{"type":"qoder","auth_kind":"pat","access_token":"jt-1","personal_token":"pt-1"}`,
+			wantType:    "qoder",
+			wantBaseURL: "https://gateway.qoder.com.cn",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(tempDir, test.wantType+".json"), []byte(test.raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			auths, err := NewFileSynthesizer().Synthesize(&SynthesisContext{
+				Config:  &config.Config{},
+				AuthDir: tempDir,
+				Now:     time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC),
+			})
+			if err != nil {
+				t.Fatalf("Synthesize() error = %v", err)
+			}
+			if len(auths) != 1 {
+				t.Fatalf("auth count = %d", len(auths))
+			}
+			if got := auths[0].Provider; got != test.wantType {
+				t.Fatalf("provider = %q, want %q", got, test.wantType)
+			}
+			if got := auths[0].AuthKind(); got != coreauth.AuthKindOAuth {
+				t.Fatalf("auth kind = %q, want oauth", got)
+			}
+			if got := auths[0].Attributes["base_url"]; got != test.wantBaseURL {
+				t.Fatalf("base_url = %q, want %q", got, test.wantBaseURL)
+			}
+		})
+	}
+}
+
 func TestFileSynthesizer_Synthesize_KimiAI(t *testing.T) {
 	tempDir := t.TempDir()
 	authDataAI := map[string]any{

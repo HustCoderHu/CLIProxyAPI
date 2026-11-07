@@ -28,6 +28,12 @@ const (
 	// OpenCode represents the OpenCode provider identifier.
 	OpenCode = "opencode"
 
+	// QoderCN represents the Qoder China-mainland provider identifier.
+	QoderCN = "qoder"
+
+	// QoderINTL represents the Qoder international provider identifier.
+	QoderINTL = "qoder-intl"
+
 	// Interactions represents the Google Interactions API format identifier.
 	Interactions = "interactions"
 )

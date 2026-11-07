@@ -267,6 +267,26 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) ([
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
+	// Qoder credentials are metadata-only and carry no Storage. The executor
+	// resolves the COSY gateway host from base_url, so it is lifted onto
+	// attributes. Both the device-flow and personal-token credentials are
+	// refreshable bearer tokens, so the runtime kind is always OAuth; the
+	// metadata "auth_kind" keeps the upstream value ("oauth" or "pat").
+	if provider == "qoder" || provider == "qoder-intl" {
+		a.Attributes[coreauth.AttributeAuthKind] = coreauth.AuthKindOAuth
+		baseURL, _ := metadata["base_url"].(string)
+		baseURL = strings.TrimSpace(baseURL)
+		if baseURL == "" {
+			baseURL = "https://gateway.qoder.com.cn"
+			if provider == "qoder-intl" {
+				baseURL = "https://api3.qoder.sh"
+			}
+		}
+		a.Attributes["base_url"] = baseURL
+		if domain, _ := metadata["domain"].(string); strings.TrimSpace(domain) != "" {
+			a.Attributes["domain"] = strings.TrimSpace(domain)
+		}
+	}
 	// Read priority from auth file.
 	coreauth.ApplyAuthPriorityMetadata(a, metadata)
 	if errWeight := coreauth.ApplyAuthWeightMetadata(a, metadata); errWeight != nil {

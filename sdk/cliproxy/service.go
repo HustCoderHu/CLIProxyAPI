@@ -151,6 +151,22 @@ type Service struct {
 	antigravityRefreshPending map[string]*antigravityModelRefreshRequest
 	antigravityPersistPending map[string]*antigravityHintPersistRequest
 	antigravityPersistActive  map[string]*antigravityHintPersistRequest
+
+	// Qoder catalog probes mirror the Antigravity block above. They are separate
+	// fields, not a shared generic, so a change to one provider can never
+	// invalidate the other provider's cache or fencing state.
+	qoderProbeWg sync.WaitGroup
+	// qoderContext is protected by cfgMu and owns background catalog probes.
+	qoderContext       context.Context
+	qoderProbeMu       sync.Mutex
+	qoderAccountProbes map[string]map[*qoderAccountProbe]struct{}
+	qoderRefreshWake   chan struct{}
+	// qoderRefreshPending is protected by qoderProbeMu. Each entry owns one
+	// worker and at most one queued snapshot shared by all probe entry points.
+	// A nil value means the worker is running without a queued successor.
+	qoderRefreshPending map[string]*qoderModelRefreshRequest
+	qoderPersistPending map[string]*qoderCatalogPersistRequest
+	qoderPersistActive  map[string]*qoderCatalogPersistRequest
 }
 
 // SetResultPolicy sets an execution result policy on the underlying core auth manager.

@@ -128,6 +128,9 @@ func run() (exitStatus int) {
 	var antigravityLogin bool
 	var kimiLogin bool
 	var kimiAILogin bool
+	var qoderLogin bool
+	var qoderINTLLogin bool
+	var qoderPersonalToken string
 	var xaiLogin bool
 	var devinLogin bool
 	var metaLogin bool
@@ -159,6 +162,9 @@ func run() (exitStatus int) {
 	flag.BoolVar(&antigravityLogin, "antigravity-login", false, "Login to Antigravity using OAuth")
 	flag.BoolVar(&kimiLogin, "kimi-login", false, "Login to Kimi (.com) using OAuth")
 	flag.BoolVar(&kimiAILogin, "kimi-ai-login", false, "Login to Kimi.ai using OAuth")
+	flag.BoolVar(&qoderLogin, "qoder-login", false, "Login to Qoder (China mainland) using OAuth")
+	flag.BoolVar(&qoderINTLLogin, "qoder-intl-login", false, "Login to Qoder (International) using OAuth")
+	flag.StringVar(&qoderPersonalToken, "qoder-personal-token", "", "Import a Qoder personal access token (pt-...) instead of the browser flow; combine with -qoder-login or -qoder-intl-login")
 	flag.BoolVar(&xaiLogin, "xai-login", false, "Login to xAI using OAuth")
 	flag.BoolVar(&devinLogin, "devin-login", false, "Login to Devin using OAuth")
 	flag.BoolVar(&metaLogin, "meta-login", false, "Login to Meta using OAuth")
@@ -670,12 +676,13 @@ func run() (exitStatus int) {
 
 	// Create login options to be used in authentication flows.
 	options := &cmd.LoginOptions{
-		NoBrowser:    noBrowser,
-		CallbackPort: oauthCallbackPort,
-		ProxyURL:     loginProxyURL,
+		NoBrowser:     noBrowser,
+		CallbackPort:  oauthCallbackPort,
+		ProxyURL:      loginProxyURL,
+		PersonalToken: qoderPersonalToken,
 	}
 
-	commandMode := vertexImport != "" || siwcBind != "" || antigravityLogin || codexLogin || codexDeviceLogin || claudeLogin || kimiLogin || kimiAILogin || xaiLogin || devinLogin || metaLogin
+	commandMode := vertexImport != "" || siwcBind != "" || antigravityLogin || codexLogin || codexDeviceLogin || claudeLogin || kimiLogin || kimiAILogin || qoderLogin || qoderINTLLogin || xaiLogin || devinLogin || metaLogin
 	cloudConfigMissing := isCloudDeploy && !configFileExists
 	homeMode := configLoadedFromHome || (cfg != nil && cfg.Home.Enabled)
 	exampleAPIKeySafeMode := shouldEnableExampleAPIKeySafeMode(cfg, commandMode, tuiMode, standalone, cloudConfigMissing, homeMode)
@@ -749,6 +756,10 @@ func run() (exitStatus int) {
 		cmd.DoKimiLogin(cfg, options)
 	} else if kimiAILogin {
 		cmd.DoKimiAILogin(cfg, options)
+	} else if qoderLogin {
+		cmd.DoQoderLogin(cfg, options)
+	} else if qoderINTLLogin {
+		cmd.DoQoderINTLLogin(cfg, options)
 	} else if xaiLogin {
 		cmd.DoXAILogin(cfg, options)
 	} else if devinLogin {
@@ -1003,6 +1014,7 @@ func argvFlagConsumesValue(name string) bool {
 	switch name {
 	case "codex-login", "codex-device-login", "claude-login", "no-browser",
 		"antigravity-login", "kimi-login", "kimi-ai-login", "xai-login", "devin-login", "meta-login",
+		"qoder-login", "qoder-intl-login",
 		"discover", "discover-json", "home-disable-cluster-discovery",
 		"tui", "standalone", "local-model":
 		return false

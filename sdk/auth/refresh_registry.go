@@ -13,6 +13,10 @@ func init() {
 	registerRefreshLead("kimi", func() Authenticator { return NewKimiAuthenticator() })
 	registerRefreshLead("kimi-ai", func() Authenticator { return NewKimiAIAuthenticator() })
 	registerRefreshLead("kimi.ai", func() Authenticator { return NewKimiAIDotAuthenticator() })
+	// Qoder registers under both realm keys; the realm is carried by the auth
+	// file's provider, so one shared refresh lead covers both.
+	registerRefreshLead("qoder", func() Authenticator { return NewQoderAuthenticator() })
+	registerRefreshLead("qoder-intl", func() Authenticator { return NewQoderINTLAuthenticator() })
 	registerRefreshLead("xai", func() Authenticator { return NewXAIAuthenticator() })
 	registerRefreshLead("devin", func() Authenticator { return NewDevinAuthenticator() })
 	registerRefreshLead("meta", func() Authenticator { return NewMetaAuthenticator() })

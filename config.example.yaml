@@ -969,6 +969,53 @@ upstream:
 #         - api-key: "..."
 #           weight: 5 # optional: weighted-round-robin share; omitted defaults to 1; maximum 1,000,000
 #
+#   # Qoder (China mainland) API keys. Native COSY-signed gateway at gateway.qoder.com.cn.
+#   # api-key is a Qoder personal access token ("pt-...").
+#   # Qoder CN and Qoder INTL serve identically named model IDs (e.g. "qmodel"). The model
+#   # registry keys models by ID and merges same-ID registrations across providers, so
+#   # without a prefix the two realms collapse into one catalog entry and requests may be
+#   # routed to the wrong realm. Keep them apart with `prefix` on the credentials AND
+#   # routing.force-model-prefix: true. That switch is global: it also removes the
+#   # unprefixed aliases of any other credential that has a prefix configured.
+#   # The model catalog is fetched per credential from the upstream; models the account has
+#   # disabled (enable: false) are omitted from /v1/models.
+#   # Accounts can also be added with `--qoder-login` (OAuth) instead of an API key.
+#
+#   qoder:
+#     - name: qoder-1
+#       priority: 0 # larger values take precedence when selecting credentials
+#       prefix: "cn" # required for realm isolation: clients call "cn/qmodel"
+#       disable-cooling: false # optional override
+#       base-url: "https://gateway.qoder.com.cn" # optional: defaults to the CN gateway
+#       headers:
+#         X-Custom-Header: "custom-value"
+#       proxy-url: "socks5://proxy.example.com:1080" # optional: per-key proxy override
+#       excluded-models:
+#         - "qmodel_latest" # exclude specific models (exact match)
+#       keys:
+#         - api-key: "pt-..." # Qoder personal access token
+#           weight: 5 # optional: weighted-round-robin share; omitted defaults to 1
+#
+#   # Qoder (international) API keys. Same protocol, INTL gateway at api3.qoder.sh.
+#   # Use the "intl" prefix so CN and INTL models stay separate, and enable
+#   # routing.force-model-prefix; see the Qoder note above.
+#   # Accounts can also be added with `--qoder-intl-login` (OAuth) instead of an API key.
+#
+#   qoder-intl:
+#     - name: qoder-intl-1
+#       priority: 0 # larger values take precedence when selecting credentials
+#       prefix: "intl" # required for realm isolation: clients call "intl/qmodel"
+#       disable-cooling: false # optional override
+#       base-url: "https://api3.qoder.sh" # optional: defaults to the INTL gateway
+#       headers:
+#         X-Custom-Header: "custom-value"
+#       proxy-url: "socks5://proxy.example.com:1080" # optional: per-key proxy override
+#       excluded-models:
+#         - "qmodel_latest" # exclude specific models (exact match)
+#       keys:
+#         - api-key: "pt-..." # Qoder personal access token
+#           weight: 5 # optional: weighted-round-robin share; omitted defaults to 1
+#
 #   # OpenAI compatibility providers
 #
 #   openai-compatibility:

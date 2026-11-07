@@ -11,6 +11,7 @@ import (
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gorilla/websocket"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/constant"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
@@ -491,6 +492,61 @@ func TestPayloadBarrierMultiExecutorSingleDocConsistency(t *testing.T) {
 		}
 		if ojson.GetBytesNoCopy(out, "filtered_out").Exists() {
 			t.Fatalf("filtered_out should be removed by finalizer: %s", out)
+		}
+	})
+
+	t.Run("qoder envelope applies payload rules after the body builder", func(t *testing.T) {
+		// The rules target keys only the Qoder body builder writes, so they can
+		// only survive when the barrier runs after BuildQoderBodyDoc. A body
+		// rebuilt after the barrier would restore the filtered key and drop the
+		// override, and the recomputed COSY signature would no longer match.
+		qoderCfg := &config.Config{Payload: config.PayloadConfig{
+			Override: []config.PayloadRule{{
+				Models: []config.PayloadModelRule{{Name: "*", Protocol: "openai"}},
+				Params: map[string]any{"parameters.max_tokens": 12345},
+			}},
+			Filter: []config.PayloadFilterRule{{
+				Models: []config.PayloadModelRule{{Name: "*", Protocol: "openai"}},
+				Params: []string{"business.model_key"},
+			}},
+		}}
+		frames := []string{
+			qoderEnvelopeFrame(`{"id":"chatcmpl-barrier","model":"qfmodel","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}`),
+			`data:{"body":"[DONE]"}`,
+		}
+		for _, stream := range []bool{false, true} {
+			t.Run(map[bool]string{false: "execute", true: "stream"}[stream], func(t *testing.T) {
+				server, calls, captured := qoderStartServer(t, frames, 0)
+				exec := NewQoderExecutor(qoderCfg, constant.QoderCN)
+				req := qoderTestRequest()
+				opts := qoderTestOptions()
+				opts.Stream = stream
+				if stream {
+					res, errStream := exec.ExecuteStream(ctx, qoderTestAuth(server.URL), req, opts)
+					if errStream != nil {
+						t.Fatalf("ExecuteStream() error = %v", errStream)
+					}
+					if _, errDrain := qoderDrain(t, res); errDrain != nil {
+						t.Fatalf("stream error = %v", errDrain)
+					}
+				} else if _, errExec := exec.Execute(ctx, qoderTestAuth(server.URL), req, opts); errExec != nil {
+					t.Fatalf("Execute() error = %v", errExec)
+				}
+				if calls.Load() != 1 {
+					t.Fatalf("upstream calls = %d, want 1", calls.Load())
+				}
+				record := qoderDecodeCaptured(t, captured)
+				if got := record.doc.Get("parameters.max_tokens").Int(); got != 12345 {
+					t.Fatalf("parameters.max_tokens = %d, want the configured 12345: %s", got, record.doc.Bytes())
+				}
+				if record.doc.Get("business.model_key").Exists() {
+					t.Fatalf("filtered business.model_key survived the barrier: %s", record.doc.Bytes())
+				}
+				if got := record.doc.Get("stream").Type; got != ojson.True {
+					t.Fatalf("stream flag = %v, want true (transport framing must not be rewritten by rules)", got)
+				}
+				qoderAssertCosySignature(t, record)
+			})
 		}
 	})
 

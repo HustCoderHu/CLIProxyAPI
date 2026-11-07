@@ -168,6 +168,12 @@ type Config struct {
 	// MetaKey defines Meta API key configurations using the same structure as Codex API keys.
 	MetaKey []MetaKey `yaml:"meta-api-key" json:"meta-api-key"`
 
+	// QoderKey defines Qoder China-mainland API key configurations.
+	QoderKey []QoderKey `yaml:"qoder-api-key" json:"qoder-api-key"`
+
+	// QoderINTLKey defines Qoder international API key configurations.
+	QoderINTLKey []QoderKey `yaml:"qoder-intl-api-key" json:"qoder-intl-api-key"`
+
 	// XAI configures provider-wide xAI request behavior.
 	XAI XAIConfig `yaml:"xai" json:"xai"`
 

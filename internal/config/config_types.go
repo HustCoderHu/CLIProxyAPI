@@ -976,6 +976,46 @@ type MetaKey = CodexKey
 // MetaModel uses the Codex model mapping structure for Meta Muse models.
 type MetaModel = CodexModel
 
+// QoderKey represents one Qoder credential. The realm is carried by the owning
+// config section: "qoder-api-key" is the China-mainland provider and
+// "qoder-intl-api-key" is the international one, so no realm field is needed.
+//
+// There is deliberately no models override. The Qoder model catalog is fetched
+// per credential from the upstream and is authoritative; a configured model list
+// would be dead config. excluded-models and headers are applied to that catalog.
+type QoderKey struct {
+	// APIKey is the Qoder personal access token ("pt-...") for this credential.
+	APIKey string `yaml:"api-key" json:"api-key"`
+
+	// Priority controls selection preference when multiple credentials match.
+	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// Weight controls proportional selection under weighted-round-robin.
+	Weight *int `yaml:"weight,omitempty" json:"weight,omitempty"`
+
+	// Prefix namespaces this credential's models (e.g. "cn/qmodel"). It is the
+	// only way to keep identically named models from the two realms apart: the
+	// model registry merges same-id registrations across providers. It must be
+	// combined with routing.force-model-prefix to fully isolate them.
+	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+
+	// BaseURL overrides the Qoder gateway host. Defaults to the realm gateway
+	// (https://gateway.qoder.com.cn or https://api3.qoder.sh).
+	BaseURL string `yaml:"base-url,omitempty" json:"base-url,omitempty"`
+
+	// ProxyURL overrides the global proxy setting for this API key if provided.
+	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
+
+	// Headers optionally adds extra HTTP headers for requests sent with this key.
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+
+	// ExcludedModels lists model IDs that should be excluded for this provider.
+	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
+
+	// DisableCooling overrides the global cooling policy for this credential when set.
+	DisableCooling *bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+}
+
 // GeminiKey represents the configuration for a Gemini API key,
 // including optional overrides for upstream base URL, proxy routing, and headers.
 type GeminiKey struct {

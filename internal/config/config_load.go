@@ -309,6 +309,10 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	// Sanitize Meta keys.
 	cfg.SanitizeMetaKeys()
 
+	// Sanitize Qoder keys: drop entries without api-key
+	cfg.SanitizeQoderKeys()
+	cfg.SanitizeQoderINTLKeys()
+
 	// Sanitize Codex header defaults.
 	cfg.SanitizeCodexHeaderDefaults()
 
