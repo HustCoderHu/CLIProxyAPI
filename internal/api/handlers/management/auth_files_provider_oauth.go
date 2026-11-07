@@ -421,9 +421,17 @@ func (h *Handler) RequestCodexToken(c *gin.Context) {
 	c.JSON(200, respPayload)
 }
 
+// isIdentitylessOAuthProvider lists providers whose credentials carry no email
+// or account id. Qoder auth files store a uid and nickname only, so a targeted
+// re-login with ?name= must not fail the identity comparison.
 func isIdentitylessOAuthProvider(provider string) bool {
 	trimmed := strings.ToLower(strings.TrimSpace(provider))
-	return trimmed == "kimi" || trimmed == "kimi-ai" || trimmed == "codebuddy-cn"
+	switch trimmed {
+	case "kimi", "kimi-ai", "codebuddy-cn", "qoder", "qoder-intl":
+		return true
+	default:
+		return false
+	}
 }
 
 func matchesOAuthRecoveryTarget(target oauthRecoveryTarget, email, accountID, candidateFileName string) bool {

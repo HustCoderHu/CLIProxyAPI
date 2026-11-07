@@ -364,6 +364,53 @@ func (cfg *Config) SanitizeCodeBuddyCNKeys() {
 	cfg.CodeBuddyCNKey = out
 }
 
+// SanitizeQoderKeys normalizes Qoder China-mainland credentials.
+func (cfg *Config) SanitizeQoderKeys() {
+	if cfg == nil {
+		return
+	}
+	cfg.QoderKey = sanitizeQoderKeyEntries(cfg.QoderKey)
+}
+
+// SanitizeQoderINTLKeys normalizes Qoder international credentials.
+func (cfg *Config) SanitizeQoderINTLKeys() {
+	if cfg == nil {
+		return
+	}
+	cfg.QoderINTLKey = sanitizeQoderKeyEntries(cfg.QoderINTLKey)
+}
+
+// sanitizeQoderKeyEntries drops entries without an API key and deduplicates the
+// rest by (APIKey, BaseURL, Prefix). The prefix is part of the identity: two
+// credentials that differ only in prefix register different model namespaces, so
+// they must both survive.
+func sanitizeQoderKeyEntries(entries []QoderKey) []QoderKey {
+	if len(entries) == 0 {
+		return entries
+	}
+	out := entries[:0]
+	seen := make(map[string]struct{}, len(entries))
+	for i := range entries {
+		entry := &entries[i]
+		entry.APIKey = strings.TrimSpace(entry.APIKey)
+		entry.Prefix = normalizeModelPrefix(entry.Prefix)
+		entry.BaseURL = strings.TrimSpace(entry.BaseURL)
+		entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
+		entry.Headers = NormalizeHeaders(entry.Headers)
+		entry.ExcludedModels = NormalizeExcludedModels(entry.ExcludedModels)
+		if entry.APIKey == "" {
+			continue
+		}
+		uniqueKey := entry.APIKey + "|" + entry.BaseURL + "|" + entry.Prefix
+		if _, exists := seen[uniqueKey]; exists {
+			continue
+		}
+		seen[uniqueKey] = struct{}{}
+		out = append(out, *entry)
+	}
+	return out
+}
+
 func sanitizeMetaKeyEntries(entries []MetaKey) []MetaKey {
 	if len(entries) == 0 {
 		return entries

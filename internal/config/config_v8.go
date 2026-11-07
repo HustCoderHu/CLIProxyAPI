@@ -69,6 +69,7 @@ var v8KeyFamilies = []configPath{
 	{"vertex-api-key", "vertex"}, {"codex-api-key", "codex"},
 	{"claude-api-key", "claude"}, {"xai-api-key", "xai"}, {"meta-api-key", "meta"},
 	{"codebuddy-cn-api-key", "codebuddy-cn"},
+	{"qoder-api-key", "qoder"}, {"qoder-intl-api-key", "qoder-intl"},
 	{"openai-compatibility", "openai-compatibility"},
 }
 

@@ -199,6 +199,8 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.GET("/kimi-auth-url", s.mgmt.RequestKimiToken)
 		mgmt.GET("/kimi-ai-auth-url", s.mgmt.RequestKimiAIToken)
 		mgmt.GET("/codebuddy-cn-auth-url", s.mgmt.RequestCodeBuddyCNToken)
+		mgmt.GET("/qoder-auth-url", s.mgmt.RequestQoderToken)
+		mgmt.GET("/qoder-intl-auth-url", s.mgmt.RequestQoderINTLToken)
 		mgmt.GET("/xai-auth-url", s.mgmt.RequestXAIToken)
 		mgmt.GET("/devin-auth-url", s.mgmt.RequestDevinToken)
 		mgmt.GET("/meta-auth-url", s.mgmt.RequestMetaToken)

@@ -28,6 +28,8 @@ func newDefaultAuthManager() *sdkAuth.Manager {
 		sdkAuth.NewKimiAIAuthenticator(),
 		sdkAuth.NewKimiAIDotAuthenticator(),
 		sdkAuth.NewCodeBuddyCNAuthenticator(),
+		sdkAuth.NewQoderAuthenticator(),
+		sdkAuth.NewQoderINTLAuthenticator(),
 		sdkAuth.NewXAIAuthenticator(),
 		sdkAuth.NewDevinAuthenticator(),
 		sdkAuth.NewMetaAuthenticator(),
@@ -432,11 +434,15 @@ func (s *Service) prepareCoreAuthForModelRegistration(ctx context.Context, auth 
 		}
 		auth.CreatedAt = existing.CreatedAt
 		if existing.Metadata != nil {
-			if persistedHints, hasHints := existing.Metadata[antigravityPersistedHintsMetaKey]; hasHints {
-				if auth.Metadata == nil {
-					auth.Metadata = make(map[string]any)
+			if auth.Metadata == nil {
+				auth.Metadata = make(map[string]any)
+			}
+			// Native capability snapshots are runtime state: re-registration must
+			// carry them forward instead of dropping them on the next write.
+			for _, metaKey := range []string{antigravityPersistedHintsMetaKey, qoderPersistedCatalogKey} {
+				if persisted, hasPersisted := existing.Metadata[metaKey]; hasPersisted {
+					auth.Metadata[metaKey] = persisted
 				}
-				auth.Metadata[antigravityPersistedHintsMetaKey] = persistedHints
 			}
 		}
 		if !auth.HasFileSnapshot() && !existing.Disabled && existing.Status != coreauth.StatusDisabled && !auth.Disabled && auth.Status != coreauth.StatusDisabled {
@@ -480,6 +486,7 @@ func (s *Service) prepareCoreAuthForModelRegistration(ctx context.Context, auth 
 		auth = current
 	}
 	s.cancelStaleAntigravityProbes(auth.ID)
+	s.cancelStaleQoderProbes(auth.ID)
 	return auth
 }
 
@@ -657,6 +664,7 @@ func (s *Service) applyCoreAuthRemoval(ctx context.Context, id string) {
 	s.coreManager.Remove(ctx, id)
 	GlobalModelRegistry().UnregisterClient(id)
 	s.cancelStaleAntigravityProbes(id)
+	s.cancelStaleQoderProbes(id)
 	if strings.EqualFold(provider, "codex") {
 		executor.CloseCodexWebsocketSessionsForAuthID(id, "auth_removed")
 	}

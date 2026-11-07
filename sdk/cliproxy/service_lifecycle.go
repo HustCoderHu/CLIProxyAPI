@@ -41,6 +41,7 @@ func (s *Service) Run(ctx context.Context) error {
 	ctx, runCancel := context.WithCancel(ctx)
 	s.cfgMu.Lock()
 	s.antigravityContext = ctx
+	s.qoderContext = ctx
 	s.cfgMu.Unlock()
 	s.homeMu.Lock()
 	s.runCancel = runCancel
@@ -236,6 +237,7 @@ func (s *Service) Run(ctx context.Context) error {
 	s.registerModelRefreshCallback()
 	if !homeEnabled {
 		go s.runAntigravityModelRefresh(ctx)
+		go s.runQoderModelRefresh(ctx)
 	}
 
 	select {

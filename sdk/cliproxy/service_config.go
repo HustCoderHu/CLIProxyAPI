@@ -168,6 +168,7 @@ func (s *Service) commitConfigUpdate(newCfg *config.Config) configCommit {
 	s.cfg = newCfg
 	s.cfgMu.Unlock()
 	s.cancelStaleAntigravityProbes("")
+	s.cancelStaleQoderProbes("")
 	s.configSequence++
 	registry.UpdateModelCatalogSources(newCfg.Models, newCfg.Home.Enabled)
 	return configCommit{cfg: newCfg, sequence: s.configSequence}

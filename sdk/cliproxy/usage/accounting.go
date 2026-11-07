@@ -355,7 +355,9 @@ func tokenAccountingSemanticsFor(provider, executorType string) tokenAccountingS
 			return tokenAccountingSemanticsSeparateReasoning
 		}
 	}
-	for _, marker := range []string{"openai", "codex", "xai", "grok", "kimi", "qwen", "deepseek", "openrouter"} {
+	// "qoder" also covers "qoder-intl": the upstream is an OpenAI-shape SSE
+	// stream whose reasoning tokens are already inside the reported output.
+	for _, marker := range []string{"openai", "codex", "xai", "grok", "kimi", "qwen", "deepseek", "openrouter", "qoder"} {
 		if strings.Contains(value, marker) {
 			return tokenAccountingSemanticsSubset
 		}

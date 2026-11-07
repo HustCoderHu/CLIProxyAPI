@@ -70,6 +70,12 @@ func TestV8ExampleLoadsAndRoundTrips(t *testing.T) {
 	if cfg.Port != 8317 || len(cfg.APIKeys) != 3 || len(cfg.GeminiKey) != 3 || len(cfg.CodexKey) != 1 || len(cfg.ClaudeKey) != 2 || len(cfg.VertexCompatAPIKey) != 1 || len(cfg.XAIKey) != 1 || len(cfg.MetaKey) != 1 || len(cfg.CodeBuddyCNKey) != 1 || len(cfg.InteractionsKey) != 1 || len(cfg.OpenAICompatibility) != 1 {
 		t.Fatal("v8 example fields did not reach runtime config")
 	}
+	if len(cfg.QoderKey) != 1 || len(cfg.QoderINTLKey) != 1 {
+		t.Fatalf("qoder example blocks did not reach runtime config: cn=%d intl=%d", len(cfg.QoderKey), len(cfg.QoderINTLKey))
+	}
+	if cfg.QoderKey[0].Prefix != "cn" || cfg.QoderINTLKey[0].Prefix != "intl" {
+		t.Fatal("qoder example blocks must document distinct realm prefixes")
+	}
 	if !cfg.QuotaExceeded.AntigravityCredits || cfg.QuotaExceeded.SwitchProject || cfg.QuotaExceeded.SwitchPreviewModel {
 		t.Fatal("legacy-only quota examples must remain commented")
 	}

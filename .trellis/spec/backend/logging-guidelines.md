@@ -30,6 +30,31 @@ log.WithFields(log.Fields{
 
 证据：`internal/clienterror` 与 executor 代码在不回显 token 材料的前提下完成故障分类；没有记录 `Authorization` 的模式。
 
+### 不要记录上游错误对象的完整文本
+
+`Error()` 往往内联上游响应体。当请求体里带着凭据时，上游的回显或错误消息会把凭据
+原样送进日志。
+
+已确认的两个来源：
+
+1. **provider 的 `StatusError`**（如 `internal/auth/qoder` 的 `StatusError.Error()`
+   内联最多 200 字节响应体）。PAT 交换请求体里正是 `personal_token`，交换失败时上游
+   回显即泄漏。记录时只取状态码。
+2. **代理 URL 内嵌的用户名密码**。`err.Error()` 会带上完整代理地址。用
+   `redactSessionProxyInString(text, proxyURL)`（`internal/api/handlers/management/oauth_sessions.go:506`）
+   脱敏后再记录。
+
+```go
+// Bad: errExchange.Error() may quote the submitted personal token back.
+log.Errorf("%s personal token import failed: %v", realm.Provider, errExchange)
+
+// Good: log the status only.
+log.Errorf("%s personal token import failed: status %d", realm.Provider, qoderStatusFromError(errExchange))
+```
+
+判定方法：问"这个 error 字符串里有没有可能出现请求体或连接串"。可能是，就只记录
+状态码 / 错误类别等结构化字段。
+
 ## 避免热路径日志噪声
 
 流 executor 会发出大量事件。把每 chunk 的日志保持在 `Debug`，不要在 `Info` 记录完整请求/响应体。使用已有的 helper `internal/runtime/executor/helps/logging_helpers.go` 做一致且脱敏的流日志，而不是临时 `log.Printf`。

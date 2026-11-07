@@ -44,6 +44,7 @@ func (s *Service) registerModelsForAuthWithConfigAndCache(ctx context.Context, c
 	// not overwrite or remove the newer registration when it finishes last.
 	fence := newModelRegistrationFence(a, cfg)
 	s.cancelStaleAntigravityProbes(a.ID)
+	s.cancelStaleQoderProbes(a.ID)
 	if a.Disabled {
 		if s != nil && s.coreManager != nil {
 			if current, ok := s.coreManager.GetByID(a.ID); ok && current != nil && !current.Disabled {
@@ -143,6 +144,24 @@ func (s *Service) registerModelsForAuthWithConfigAndCache(ctx context.Context, c
 			}
 		} else {
 			models = registry.GetAntigravityModels()
+		}
+		models = applyExcludedModels(models, excluded)
+	case constant.QoderCN, constant.QoderINTL:
+		if !(cfg != nil && cfg.Home.Enabled) {
+			expectedRegEpoch := GlobalModelRegistry().ClientRegistrationEpoch(a.ID)
+			expectedKey := s.qoderCatalogKey(a)
+			catalog := s.cachedQoderCatalog(a)
+			if catalog != nil {
+				// Publish the known catalog through the same fenced,
+				// state-preserving path as refreshes. An expired catalog stays
+				// usable while the probe is pending, including its quota and
+				// suspension projections.
+				s.applyQoderCatalog(ctx, a, provider, catalog, expectedKey, a.RegistrationEpoch, expectedRegEpoch)
+				s.asyncProbeQoderCatalog(ctx, a, provider)
+				return true
+			}
+		} else {
+			models = registry.GetQoderModels(provider)
 		}
 		models = applyExcludedModels(models, excluded)
 	case "claude":
@@ -346,12 +365,18 @@ func (s *Service) registerModelsForAuthWithConfigAndCache(ctx context.Context, c
 		if strings.EqualFold(strings.TrimSpace(a.Provider), "antigravity") {
 			s.asyncProbeAntigravityCapabilities(ctx, a, key)
 		}
+		if qoderProviderSupported(a.Provider) {
+			s.asyncProbeQoderCatalog(ctx, a, key)
+		}
 		return published
 	}
 
 	published = s.unregisterModelsForAuthFenced(a, fence)
 	if provider == "antigravity" {
 		s.asyncProbeAntigravityCapabilities(ctx, a, key)
+	}
+	if qoderProviderSupported(a.Provider) {
+		s.asyncProbeQoderCatalog(ctx, a, key)
 	}
 	return published
 }

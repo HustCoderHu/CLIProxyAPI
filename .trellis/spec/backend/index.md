@@ -25,6 +25,7 @@
 - payload 配置是发送前的最终语义屏障；用户 payload 规则仅应用一次，之后不得覆盖。
 - 上游连接建立后不得设置超时（仅 Codex websocket 存活、wsrelay、管理 API、fetch 工具为例外）。
 - 启动外禁用 `log.Fatal`；客户端错误用 `internal/clienterror` 分类。
+- 不得记录上游 `StatusError.Error()` 全文或含凭据的代理 URL；只记状态码/错误类别。
 - helper 放在 `internal/runtime/executor/helps/`，不要放 `executor/`。
 
 **语言**：文档与代码注释仅用英文。

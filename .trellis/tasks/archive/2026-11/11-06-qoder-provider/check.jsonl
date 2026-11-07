@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "verify ojson/base64, payload barrier, timeouts"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "verify error classification and no secrets"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "verify executor/helps placement"}
+{"file": ".trellis/tasks/11-06-qoder-provider/research/07-cosy-golden-vectors.md", "reason": "golden vectors to verify byte-exact protocol output"}

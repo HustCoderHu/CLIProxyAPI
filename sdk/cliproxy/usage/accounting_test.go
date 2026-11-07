@@ -112,6 +112,24 @@ func TestEnsureTokenBreakdownForProviderUsesKnownSemantics(t *testing.T) {
 			wantInput:  150,
 			wantOutput: 42,
 		},
+		{
+			name:       "Qoder subsets reasoning into output",
+			provider:   "qoder",
+			detail:     Detail{InputTokens: 100, OutputTokens: 30, ReasoningTokens: 12, CacheReadTokens: 40, CacheCreationTokens: 10},
+			wantTotal:  130,
+			wantInput:  100,
+			wantOutput: 30,
+		},
+		{
+			// "qoder" is matched as a substring, so the INTL realm resolves to the
+			// same Openai-shape semantics as the CN realm.
+			name:       "Qoder INTL matches the CN semantics",
+			provider:   "qoder-intl",
+			detail:     Detail{InputTokens: 100, OutputTokens: 30, ReasoningTokens: 12, CacheReadTokens: 40, CacheCreationTokens: 10},
+			wantTotal:  130,
+			wantInput:  100,
+			wantOutput: 30,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

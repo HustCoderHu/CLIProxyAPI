@@ -165,6 +165,12 @@ type Config struct {
 	// CodeBuddyCNKey defines CodeBuddy CN (Tencent) API key configurations.
 	CodeBuddyCNKey []CodeBuddyCNKey `yaml:"codebuddy-cn-api-key" json:"codebuddy-cn-api-key"`
 
+	// QoderKey defines Qoder China-mainland API key configurations.
+	QoderKey []QoderKey `yaml:"qoder-api-key" json:"qoder-api-key"`
+
+	// QoderINTLKey defines Qoder international API key configurations.
+	QoderINTLKey []QoderKey `yaml:"qoder-intl-api-key" json:"qoder-intl-api-key"`
+
 	// XAI configures provider-wide xAI request behavior.
 	XAI XAIConfig `yaml:"xai" json:"xai"`
 
