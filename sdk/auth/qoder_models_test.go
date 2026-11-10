@@ -209,6 +209,91 @@ func TestQoderParseModelListAcceptsEmptyCatalog(t *testing.T) {
 	}
 }
 
+// TestQoderParseModelListMergesAppScene covers the chat+app union: Qoder may
+// launch a model in the desktop "app" scene before it reaches "chat", so both
+// scenes must be published with chat winning on duplicate keys.
+func TestQoderParseModelListMergesAppScene(t *testing.T) {
+	t.Run("union keeps stable key order", func(t *testing.T) {
+		payload := `{
+		  "chat": [{"key": "a", "display_name": "A", "enable": true}],
+		  "app": [{"key": "b", "display_name": "B", "enable": true}]
+		}`
+		catalog, ok := ParseQoderModelList([]byte(payload))
+		if !ok {
+			t.Fatalf("chat+app payload must parse")
+		}
+		keys := make([]string, 0, len(catalog.Entries))
+		for _, entry := range catalog.Entries {
+			keys = append(keys, entry.Key)
+		}
+		if !slices.Equal(keys, []string{"a", "b"}) {
+			t.Fatalf("unexpected merged keys: %v", keys)
+		}
+	})
+
+	t.Run("chat wins on duplicate key", func(t *testing.T) {
+		payload := `{
+		  "chat": [{"key": "shared", "display_name": "Chat Authority", "enable": true}],
+		  "app": [{"key": "shared", "display_name": "App Name", "enable": false}]
+		}`
+		catalog, ok := ParseQoderModelList([]byte(payload))
+		if !ok {
+			t.Fatalf("duplicate key payload must parse")
+		}
+		if len(catalog.Entries) != 1 {
+			t.Fatalf("duplicate keys must collapse to one entry, got %+v", catalog.Entries)
+		}
+		entry := catalog.Entries[0]
+		if entry.Key != "shared" || entry.DisplayName != "Chat Authority" || !entry.Enable {
+			t.Fatalf("chat entry must be authoritative, got %+v", entry)
+		}
+	})
+
+	t.Run("app-only payload parses", func(t *testing.T) {
+		payload := `{
+		  "app": [{
+		    "key": "lmodel",
+		    "display_name": "QoDuck",
+		    "enable": true,
+		    "is_vl": true,
+		    "is_reasoning": true,
+		    "max_input_tokens": 180000
+		  }]
+		}`
+		catalog, ok := ParseQoderModelList([]byte(payload))
+		if !ok {
+			t.Fatalf("app-only payload must parse")
+		}
+		if len(catalog.Entries) != 1 {
+			t.Fatalf("app-only payload must yield one entry, got %+v", catalog.Entries)
+		}
+		entry := catalog.Entries[0]
+		if entry.Key != "lmodel" || entry.DisplayName != "QoDuck" || !entry.IsVL || !entry.IsReasoning {
+			t.Fatalf("app entry decoded incorrectly: %+v", entry)
+		}
+	})
+
+	t.Run("unrelated scenes ignored", func(t *testing.T) {
+		payload := `{
+		  "chat": [{"key": "a", "display_name": "A", "enable": true}],
+		  "app": [],
+		  "inline": [{"key": "inline-only", "display_name": "Inline", "enable": true}],
+		  "quest": [{"key": "quest-only", "display_name": "Quest", "enable": true}]
+		}`
+		catalog, ok := ParseQoderModelList([]byte(payload))
+		if !ok {
+			t.Fatalf("payload with ignored scenes must parse")
+		}
+		keys := make([]string, 0, len(catalog.Entries))
+		for _, entry := range catalog.Entries {
+			keys = append(keys, entry.Key)
+		}
+		if !slices.Equal(keys, []string{"a"}) {
+			t.Fatalf("only conversational scenes may be published, got %v", keys)
+		}
+	})
+}
+
 func TestQoderPersistedCatalogRoundTrip(t *testing.T) {
 	catalog, ok := ParseQoderModelList([]byte(qoderCatalogFixture))
 	if !ok {

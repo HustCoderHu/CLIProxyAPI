@@ -99,6 +99,43 @@ func TestQoderModelInfoNilThinkingAndFallbacks(t *testing.T) {
 	}
 }
 
+// TestQoderModelInfoFromEntryAppOnlyModel pins the projection of an "app"-scene
+// only model (QoDuck) that has no static seed entry.
+func TestQoderModelInfoFromEntryAppOnlyModel(t *testing.T) {
+	entry := sdkauth.QoderModelEntry{
+		Key:            "lmodel",
+		DisplayName:    "QoDuck",
+		MaxInputTokens: 180000,
+		IsVL:           true,
+		IsReasoning:    true,
+		Enable:         true,
+		Thinking: &sdkauth.QoderThinkingConfig{
+			Levels:      []string{"high", "low", "xhigh"},
+			ZeroAllowed: true,
+		},
+	}
+	info := qoderModelInfoFromEntry(entry, "qoder", nil)
+	if info == nil {
+		t.Fatalf("projection returned nil")
+	}
+	if info.ID != "lmodel" || info.DisplayName != "QoDuck" {
+		t.Fatalf("unexpected identity: %+v", info)
+	}
+	if info.ContextLength != 180000 || info.InputTokenLimit != 180000 {
+		t.Fatalf("context fields must mirror max_input_tokens: %+v", info)
+	}
+	if !slices.Contains(info.SupportedInputModalities, "image") {
+		t.Fatalf("is_vl entry must advertise image input: %v", info.SupportedInputModalities)
+	}
+	if info.Thinking == nil {
+		t.Fatalf("thinking_config present must yield Thinking support")
+	}
+	if !info.Thinking.ZeroAllowed || !slices.Equal(info.Thinking.Levels, []string{"high", "low", "xhigh"}) {
+		t.Fatalf("thinking mapping mismatch: %+v", info.Thinking)
+	}
+	assertQoderThinkingHasNoBudget(t, info)
+}
+
 // assertQoderThinkingHasNoBudget enforces the level-only contract: a Qoder model
 // must never be classified as budget-capable, or effort requests would be
 // clamped into token budgets.
@@ -584,8 +621,8 @@ func TestQoderCatalogRejectedWhenHomeEnabled(t *testing.T) {
 
 func TestQoderRegistryStaticSeeds(t *testing.T) {
 	cn := registry.GetQoderModels("qoder")
-	if len(cn) != 13 {
-		t.Fatalf("CN seed must contain 13 models, got %d", len(cn))
+	if len(cn) != 14 {
+		t.Fatalf("CN seed must contain 14 models, got %d", len(cn))
 	}
 	for _, model := range cn {
 		if model.Type != "qoder" || model.OwnedBy != "qoder" {
@@ -615,7 +652,7 @@ func TestQoderRegistryStaticSeeds(t *testing.T) {
 		t.Fatalf("unknown provider must yield nil")
 	}
 
-	if got := registry.GetStaticModelDefinitionsByChannel("qoder"); len(got) != 13 {
+	if got := registry.GetStaticModelDefinitionsByChannel("qoder"); len(got) != 14 {
 		t.Fatalf("management channel lookup for qoder returned %d models", len(got))
 	}
 	if got := registry.GetStaticModelDefinitionsByChannel("qoder-intl"); len(got) != 2 {

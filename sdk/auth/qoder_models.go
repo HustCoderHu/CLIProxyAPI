@@ -29,6 +29,12 @@ const (
 	qoderMaxCatalogBytes   = 8 << 20
 )
 
+// qoderConversationalScenes lists the catalog scenes that carry conversational
+// models, in precedence order. The first scene to declare a key wins, so "chat"
+// prices and permissions are authoritative and "app" only contributes models
+// the chat scene does not advertise yet.
+var qoderConversationalScenes = []string{"chat", "app"}
+
 // qoderDefaultMaxInputTokens mirrors the request-side fallback used by the body
 // builder when the catalog omits max_input_tokens (qoder_proxy.py:6294).
 const qoderDefaultMaxInputTokens = 180000
@@ -214,7 +220,13 @@ func qoderCleanBaseURLs(candidates []string) []string {
 	return urls
 }
 
-// ParseQoderModelList decodes the {"chat": [...]} catalog payload.
+// ParseQoderModelList decodes the {"chat": [...], "app": [...]} catalog payload.
+//
+// Qoder may launch a conversational model in its desktop app scene before the
+// chat scene, so the catalog is the union of "chat" first and "app" second.
+// Duplicate keys keep the chat entry: app metadata must never overwrite chat
+// prices or permissions. Other scenes (inline, assistant, quest, BYOK) are not
+// conversational and are deliberately ignored.
 //
 // Entries without a key are skipped, a missing "enable" means enabled, and an
 // entry with enable == false is dropped: the international catalog disables 15
@@ -228,20 +240,31 @@ func ParseQoderModelList(body []byte) (*QoderCatalog, bool) {
 	if !top.IsObject() {
 		return nil, false
 	}
-	chat := top.Get("chat")
-	if !chat.Exists() || chat.Type == ojson.Null {
+	scenes := make([]ojson.Result, 0, 2)
+	total := 0
+	sceneSeen := false
+	for _, scene := range qoderConversationalScenes {
+		node := top.Get(scene)
+		if !node.Exists() || node.Type == ojson.Null || !node.IsArray() {
+			continue
+		}
+		sceneSeen = true
+		items := node.Array()
+		total += len(items)
+		scenes = append(scenes, items...)
+	}
+	// A payload carrying no conversational scene at all is malformed, but one
+	// that only ships "app" (as the QoDuck rollout does on some accounts) is not.
+	// A present but empty array is a valid empty catalog.
+	if !sceneSeen {
 		return nil, false
 	}
-	if !chat.IsArray() {
+	if total > qoderMaxCatalogEntries {
 		return nil, false
 	}
-	items := chat.Array()
-	if len(items) > qoderMaxCatalogEntries {
-		return nil, false
-	}
-	entries := make([]QoderModelEntry, 0, len(items))
-	seen := make(map[string]struct{}, len(items))
-	for _, item := range items {
+	entries := make([]QoderModelEntry, 0, len(scenes))
+	seen := make(map[string]struct{}, len(scenes))
+	for _, item := range scenes {
 		entry, ok := parseQoderCatalogEntry(item)
 		if !ok {
 			continue

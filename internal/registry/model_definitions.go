@@ -231,7 +231,9 @@ var staticDevinModels = []*ModelInfo{
 //     "auto". All 14 keys are enable=true in the snapshot, but "auto" is a
 //     framework-reserved name that internal/util/provider.go ResolveAutoModel
 //     intercepts before any executor runs, so a seed entry for it could never
-//     serve a request. The CN seed therefore holds 13 models.
+//     serve a request. "lmodel" (QoDuck) is advertised only in the catalog
+//     "app" scene, which the parser publishes together with "chat", so it is
+//     seeded as well. The CN seed therefore holds 14 models.
 //   - INTL: only the two keys that are enable=true in qoder_catalog_intl.json
 //     (qmodel_38max, qfmodel) are seeded. The other 15 are enable=false in the
 //     snapshot; seeding them would expose models that a failing probe would then
@@ -359,6 +361,19 @@ var staticQoderModels = []*ModelInfo{
 		ContextLength:            180000,
 		InputTokenLimit:          180000,
 		SupportedInputModalities: []string{"text"},
+	},
+	// QoDuck is advertised only in the catalog "app" scene, so the static seed
+	// carries it for cold start. Live publication uses the chat+app union, so the
+	// probed entry overlays this one by key.
+	{
+		ID:                       "lmodel",
+		Type:                     "qoder",
+		OwnedBy:                  "qoder",
+		DisplayName:              "QoDuck",
+		ContextLength:            180000,
+		InputTokenLimit:          180000,
+		SupportedInputModalities: []string{"text", "image"},
+		Thinking:                 &ThinkingSupport{ZeroAllowed: true, Levels: []string{"high", "low", "xhigh"}},
 	},
 }
 
