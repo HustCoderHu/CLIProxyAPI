@@ -25,6 +25,9 @@ const (
 	// Antigravity represents the Antigravity response format identifier.
 	Antigravity = "antigravity"
 
+	// OpenCode represents the OpenCode provider identifier.
+	OpenCode = "opencode"
+
 	// Interactions represents the Google Interactions API format identifier.
 	Interactions = "interactions"
 )

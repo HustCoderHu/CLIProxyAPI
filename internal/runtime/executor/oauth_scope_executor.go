@@ -72,3 +72,10 @@ func (e XAIAutoExecutor) ForAPIKey() cliproxyauth.ProviderExecutor {
 	}
 	return &e
 }
+
+func (e OpenCodeExecutor) ForAPIKey() cliproxyauth.ProviderExecutor {
+	if e.OpenAICompatExecutor != nil {
+		e.OpenAICompatExecutor = e.OpenAICompatExecutor.ForAPIKey().(*OpenAICompatExecutor)
+	}
+	return &e
+}
